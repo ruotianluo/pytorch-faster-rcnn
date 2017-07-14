@@ -75,7 +75,17 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   cd ..
   ```
 
-4. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
+4. Build RoiPooling modeule
+  ```
+  cd layer_utils/roi_pooling/src/cuda
+  echo "Compiling roi_pooling kernels by nvcc..."
+  nvcc -c -o roi_pooling_kernel.cu.o roi_pooling_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
+  cd ../../
+  python build.py
+  cd ../../../
+  ```
+
+5. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
   ```Shell
   cd data
   git clone https://github.com/pdollar/coco.git
