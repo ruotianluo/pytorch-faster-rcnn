@@ -287,7 +287,9 @@ class resnetv1(Network):
 
     self.init_weights()
 
-  def forward_prediction(self, mode):
+  def train(self):
+    # Override train so that the training mode is set as we want
+    nn.Module.train(self)
     # Set fixed blocks to be in eval mode
     self.resnet.eval()
     self.resnet.layer1.train()
@@ -306,6 +308,7 @@ class resnetv1(Network):
     if not cfg.RESNET.BN_TRAIN:
       self.resnet.apply(set_bn_eval)
 
+  def forward_prediction(self, mode):
     net_conv = self._layers['head'](self._image)
     self._act_summaries['conv']['value'] = net_conv
 

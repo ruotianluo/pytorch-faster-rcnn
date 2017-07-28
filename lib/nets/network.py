@@ -209,12 +209,11 @@ class Network(nn.Module):
 
     return loss
 
-  def create_architecture(self, mode, num_classes, tag=None,
+  def create_architecture(self, num_classes, tag=None,
                           anchor_scales=(8, 16, 32), anchor_ratios=(0.5, 1, 2)):
     self._tag = tag
 
     self._num_classes = num_classes
-    self._mode = mode
     self._anchor_scales = anchor_scales
     self._num_scales = len(anchor_scales)
 
@@ -327,6 +326,8 @@ class Network(nn.Module):
     self._im_info = im_info # no nned to conver to variable
     self._gt_boxes = gt_boxes # no need to convert to variable
 
+    self._mode = mode
+
     rois, cls_prob, bbox_pred = self.forward_prediction(mode)
 
     if mode == 'TEST':
@@ -334,9 +335,7 @@ class Network(nn.Module):
       means = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_MEANS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
       self._predictions["bbox_pred"] = bbox_pred.mul(Variable(stds)).add(Variable(means))
     else:
-      #utils.timer.timer.tic('add_losses')
-      self._add_losses() # compute losses 
-      #utils.timer.timer.toc('add_losses')
+      self._add_losses() # compute losses
 
   def init_weights(self):
     def normal_init(m, mean, stddev, truncated=False):

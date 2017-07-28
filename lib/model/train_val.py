@@ -95,7 +95,7 @@ class SolverWrapper(object):
     # Determine different scales for anchors, see paper
 
      # Build the main computation graph
-    self.net.create_architecture('TRAIN', self.imdb.num_classes, tag='default',
+    self.net.create_architecture(self.imdb.num_classes, tag='default',
                                             anchor_scales=cfg.ANCHOR_SCALES,
                                             anchor_ratios=cfg.ANCHOR_RATIOS)
     # Define the loss
