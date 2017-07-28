@@ -7,29 +7,38 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import tensorflow as tf
+
 from model.config import cfg
 import roi_data_layer.roidb as rdl_roidb
 from roi_data_layer.layer import RoIDataLayer
-from utils.timer import Timer
+import utils.timer
 try:
   import cPickle as pickle
 except ImportError:
   import pickle
+
+import torch
+import torch.optim as optim
+
 import numpy as np
 import os
 import sys
 import glob
 import time
 
-import tensorflow as tf
-from tensorflow.python import pywrap_tensorflow
+
+def scale_lr(optimizer, scale):
+  """Scale the learning rate of the optimizer"""
+  for param_group in optimizer.param_groups:
+    param_group['lr'] *= scale
 
 class SolverWrapper(object):
   """
     A wrapper class for the training process
   """
 
-  def __init__(self, sess, network, imdb, roidb, valroidb, output_dir, tbdir, pretrained_model=None):
+  def __init__(self, network, imdb, roidb, valroidb, output_dir, tbdir, pretrained_model=None):
     self.net = network
     self.imdb = imdb
     self.roidb = roidb
@@ -42,16 +51,16 @@ class SolverWrapper(object):
       os.makedirs(self.tbvaldir)
     self.pretrained_model = pretrained_model
 
-  def snapshot(self, sess, iter):
+  def snapshot(self, iter):
     net = self.net
 
     if not os.path.exists(self.output_dir):
       os.makedirs(self.output_dir)
 
     # Store the model snapshot
-    filename = cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_{:d}'.format(iter) + '.ckpt'
+    filename = cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_{:d}'.format(iter) + '.pth'
     filename = os.path.join(self.output_dir, filename)
-    self.saver.save(sess, filename)
+    torch.save(self.net.state_dict(), filename)
     print('Wrote snapshot to: {:s}'.format(filename))
 
     # Also store some meta information, random state, etc.
@@ -79,67 +88,39 @@ class SolverWrapper(object):
 
     return filename, nfilename
 
-  def get_variables_in_checkpoint_file(self, file_name):
-    try:
-      reader = pywrap_tensorflow.NewCheckpointReader(file_name)
-      var_to_shape_map = reader.get_variable_to_shape_map()
-      return var_to_shape_map 
-    except Exception as e:  # pylint: disable=broad-except
-      print(str(e))
-      if "corrupted compressed block contents" in str(e):
-        print("It's likely that your checkpoint file has been compressed "
-              "with SNAPPY.")
-
   def train_model(self, sess, max_iters):
     # Build data layers for both training and validation set
     self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
     self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
-
     # Determine different scales for anchors, see paper
-    with sess.graph.as_default():
-      # Set the random seed for tensorflow
-      tf.set_random_seed(cfg.RNG_SEED)
-      # Build the main computation graph
-      layers = self.net.create_architecture(sess, 'TRAIN', self.imdb.num_classes, tag='default',
+
+     # Build the main computation graph
+    self.net.create_architecture('TRAIN', self.imdb.num_classes, tag='default',
                                             anchor_scales=cfg.ANCHOR_SCALES,
                                             anchor_ratios=cfg.ANCHOR_RATIOS)
-      # Define the loss
-      loss = layers['total_loss']
-      # Set learning rate and momentum
-      lr = tf.Variable(cfg.TRAIN.LEARNING_RATE, trainable=False)
-      momentum = cfg.TRAIN.MOMENTUM
-      self.optimizer = tf.train.MomentumOptimizer(lr, momentum)
-
-      # Compute the gradients wrt the loss
-      gvs = self.optimizer.compute_gradients(loss)
-      # Double the gradient of the bias if set
-      if cfg.TRAIN.DOUBLE_BIAS:
-        final_gvs = []
-        with tf.variable_scope('Gradient_Mult') as scope:
-          for grad, var in gvs:
-            scale = 1.
-            if cfg.TRAIN.DOUBLE_BIAS and '/biases:' in var.name:
-              scale *= 2.
-            if not np.allclose(scale, 1.0):
-              grad = tf.multiply(grad, scale)
-            final_gvs.append((grad, var))
-        train_op = self.optimizer.apply_gradients(final_gvs)
-      else:
-        train_op = self.optimizer.apply_gradients(gvs)
-
-      # We will handle the snapshots ourselves
-      self.saver = tf.train.Saver(max_to_keep=100000)
-      # Write the train and validation information to tensorboard
-      self.writer = tf.summary.FileWriter(self.tbdir, sess.graph)
-      self.valwriter = tf.summary.FileWriter(self.tbvaldir)
+    # Define the loss
+    # loss = layers['total_loss']
+    # Set learning rate and momentum
+    lr = cfg.TRAIN.LEARNING_RATE
+    params = []
+    for key, value in dict(self.net.named_parameters()).items():
+      if value.requires_grad:
+        if 'bias' in key:
+          params += [{'params':[value],'lr':lr*(cfg.TRAIN.DOUBLE_BIAS + 1), 'weight_decay': cfg.TRAIN.BIAS_DECAY and cfg.TRAIN.WEIGHT_DECAY or 0}]
+        else:
+          params += [{'params':[value],'lr':lr, 'weight_decay': cfg.TRAIN.WEIGHT_DECAY}]
+    momentum = cfg.TRAIN.MOMENTUM
+    self.optimizer = torch.optim.SGD(params, momentum=momentum)
+    # Write the train and validation information to tensorboard
+    self.writer = tf.summary.FileWriter(self.tbdir)
+    self.valwriter = tf.summary.FileWriter(self.tbvaldir)
 
     # Find previous snapshots if there is any to restore from
-    sfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.ckpt.meta')
+    sfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pth')
     sfiles = glob.glob(sfiles)
     sfiles.sort(key=os.path.getmtime)
     # Get the snapshot name in TensorFlow
     redstr = '_iter_{:d}.'.format(cfg.TRAIN.STEPSIZE+1)
-    sfiles = [ss.replace('.meta', '') for ss in sfiles]
     sfiles = [ss for ss in sfiles if redstr not in ss]
 
     nfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pkl')
@@ -156,22 +137,12 @@ class SolverWrapper(object):
     if lsf == 0:
       # Fresh train directly from ImageNet weights
       print('Loading initial model weights from {:s}'.format(self.pretrained_model))
-      variables = tf.global_variables()
-      # Initialize all variables first
-      sess.run(tf.variables_initializer(variables, name='init'))
-      var_keep_dic = self.get_variables_in_checkpoint_file(self.pretrained_model)
-      # Get the variables to restore, ignorizing the variables to fix
-      variables_to_restore = self.net.get_variables_to_restore(variables, var_keep_dic)
-
-      restorer = tf.train.Saver(variables_to_restore)
-      restorer.restore(sess, self.pretrained_model)
+      self.net.load_pretrained_cnn(torch.load(self.pretrained_model))
       print('Loaded.')
       # Need to fix the variables before loading, so that the RGB weights are changed to BGR
       # For VGG16 it also changes the convolutional weights fc6 and fc7 to
       # fully connected weights
-      self.net.fix_variables(sess, self.pretrained_model)
-      print('Fixed.')
-      sess.run(tf.assign(lr, cfg.TRAIN.LEARNING_RATE))
+      lr = cfg.TRAIN.LEARNING_RATE
       last_snapshot_iter = 0
     else:
       # Get the most recent snapshot and restore
@@ -179,7 +150,7 @@ class SolverWrapper(object):
       np_paths = [np_paths[-1]]
 
       print('Restorining model snapshots from {:s}'.format(sfiles[-1]))
-      self.saver.restore(sess, str(sfiles[-1]))
+      self.net.load_state_dict(torch.load(str(sfiles[-1])))
       print('Restored.')
       # Needs to restore the other hyperparameters/states for training, (TODO xinlei) I have
       # tried my best to find the random states so that it can be recovered exactly
@@ -200,21 +171,26 @@ class SolverWrapper(object):
 
         # Set the learning rate, only reduce once
         if last_snapshot_iter > cfg.TRAIN.STEPSIZE:
-          sess.run(tf.assign(lr, cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA))
+          lr = cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA
+          scale_lr(self.optimizer, cfg.TRAIN.GAMMA)
         else:
-          sess.run(tf.assign(lr, cfg.TRAIN.LEARNING_RATE))
+          lr = cfg.TRAIN.LEARNING_RATE
 
-    timer = Timer()
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
+
+    self.net.train()
+    self.net.cuda()
+
     while iter < max_iters + 1:
       # Learning rate
       if iter == cfg.TRAIN.STEPSIZE + 1:
         # Add snapshot here before reducing the learning rate
-        self.snapshot(sess, iter)
-        sess.run(tf.assign(lr, cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA))
+        self.snapshot(iter)
+        lr =  cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA
+        scale_lr(self.optimizer, cfg.TRAIN.GAMMA)
 
-      timer.tic()
+      utils.timer.timer.tic()
       # Get training data, one batch at a time
       blobs = self.data_layer.forward()
 
@@ -222,7 +198,7 @@ class SolverWrapper(object):
       if now - last_summary_time > cfg.TRAIN.SUMMARY_INTERVAL:
         # Compute the graph with summary
         rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss, summary = \
-          self.net.train_step_with_summary(sess, blobs, train_op)
+          self.net.train_step_with_summary(sess, blobs, self.optimizer)
         self.writer.add_summary(summary, float(iter))
         # Also check the summary on the validation set
         blobs_val = self.data_layer_val.forward()
@@ -232,19 +208,22 @@ class SolverWrapper(object):
       else:
         # Compute the graph without summary
         rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
-          self.net.train_step(sess, blobs, train_op)
-      timer.toc()
+          self.net.train_step(blobs, self.optimizer)
+      utils.timer.timer.toc()
 
       # Display training information
       if iter % (cfg.TRAIN.DISPLAY) == 0:
         print('iter: %d / %d, total loss: %.6f\n >>> rpn_loss_cls: %.6f\n '
               '>>> rpn_loss_box: %.6f\n >>> loss_cls: %.6f\n >>> loss_box: %.6f\n >>> lr: %f' % \
-              (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, lr.eval()))
-        print('speed: {:.3f}s / iter'.format(timer.average_time))
+              (iter, max_iters, total_loss, rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, lr))
+        print('speed: {:.3f}s / iter'.format(utils.timer.timer.average_time()))
+
+        # for k in utils.timer.timer._average_time.keys():
+        #   print(k, utils.timer.timer.average_time(k))
 
       if iter % cfg.TRAIN.SNAPSHOT_ITERS == 0:
         last_snapshot_iter = iter
-        snapshot_path, np_path = self.snapshot(sess, iter)
+        snapshot_path, np_path = self.snapshot(iter)
         np_paths.append(np_path)
         ss_paths.append(snapshot_path)
 
@@ -262,19 +241,13 @@ class SolverWrapper(object):
             sfile = ss_paths[0]
             # To make the code compatible to earlier versions of Tensorflow,
             # where the naming tradition for checkpoints are different
-            if os.path.exists(str(sfile)):
-              os.remove(str(sfile))
-            else:
-              os.remove(str(sfile + '.data-00000-of-00001'))
-              os.remove(str(sfile + '.index'))
-            sfile_meta = sfile + '.meta'
-            os.remove(str(sfile_meta))
+            os.remove(str(sfile))
             ss_paths.remove(sfile)
 
       iter += 1
 
     if last_snapshot_iter != iter - 1:
-      self.snapshot(sess, iter - 1)
+      self.snapshot(iter - 1)
 
     self.writer.close()
     self.valwriter.close()
@@ -325,13 +298,10 @@ def train_net(network, imdb, roidb, valroidb, output_dir, tb_dir,
   """Train a Fast R-CNN network."""
   roidb = filter_roidb(roidb)
   valroidb = filter_roidb(valroidb)
-
-  tfconfig = tf.ConfigProto(allow_soft_placement=True)
-  tfconfig.gpu_options.allow_growth = True
-
-  with tf.Session(config=tfconfig) as sess:
-    sw = SolverWrapper(sess, network, imdb, roidb, valroidb, output_dir, tb_dir,
+  with tf.Session(config=tf.ConfigProto(device_count = {'GPU': 0})) as sess:
+    sw = SolverWrapper(network, imdb, roidb, valroidb, output_dir, tb_dir,
                        pretrained_model=pretrained_model)
+
     print('Solving...')
     sw.train_model(sess, max_iters)
     print('done solving')

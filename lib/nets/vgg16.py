@@ -16,137 +16,99 @@ import numpy as np
 from nets.network import Network
 from model.config import cfg
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import math
+import torchvision.models as models
+
 class vgg16(Network):
   def __init__(self, batch_size=1):
     Network.__init__(self, batch_size=batch_size)
 
-  def build_network(self, sess, is_training=True):
-    with tf.variable_scope('vgg_16', 'vgg_16'):
-      # select initializers
-      if cfg.TRAIN.TRUNCATED:
-        initializer = tf.truncated_normal_initializer(mean=0.0, stddev=0.01)
-        initializer_bbox = tf.truncated_normal_initializer(mean=0.0, stddev=0.001)
-      else:
-        initializer = tf.random_normal_initializer(mean=0.0, stddev=0.01)
-        initializer_bbox = tf.random_normal_initializer(mean=0.0, stddev=0.001)
+  def build_network(self):
+    self.vgg = models.vgg16()
+    # Remove fc8
+    self.vgg.classifier = nn.Sequential(*list(self.vgg.classifier._modules.values())[:-1])
 
-      net = slim.repeat(self._image, 2, slim.conv2d, 64, [3, 3],
-                        trainable=False, scope='conv1')
-      net = slim.max_pool2d(net, [2, 2], padding='SAME', scope='pool1')
-      net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3],
-                        trainable=False, scope='conv2')
-      net = slim.max_pool2d(net, [2, 2], padding='SAME', scope='pool2')
-      net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3],
-                        trainable=is_training, scope='conv3')
-      net = slim.max_pool2d(net, [2, 2], padding='SAME', scope='pool3')
-      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3],
-                        trainable=is_training, scope='conv4')
-      net = slim.max_pool2d(net, [2, 2], padding='SAME', scope='pool4')
-      net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3],
-                        trainable=is_training, scope='conv5')
-      self._act_summaries.append(net)
-      self._layers['head'] = net
-      # build the anchors for the image
-      self._anchor_component()
+    # Fix the layers before conv3:
+    for layer in range(10):
+      for p in self.vgg.features[layer].parameters(): p.requires_grad = False
 
-      # rpn
-      rpn = slim.conv2d(net, 512, [3, 3], trainable=is_training, weights_initializer=initializer, scope="rpn_conv/3x3")
-      self._act_summaries.append(rpn)
-      rpn_cls_score = slim.conv2d(rpn, self._num_anchors * 2, [1, 1], trainable=is_training,
-                                  weights_initializer=initializer,
-                                  padding='VALID', activation_fn=None, scope='rpn_cls_score')
-      # change it so that the score has 2 as its channel size
-      rpn_cls_score_reshape = self._reshape_layer(rpn_cls_score, 2, 'rpn_cls_score_reshape')
-      rpn_cls_prob_reshape = self._softmax_layer(rpn_cls_score_reshape, "rpn_cls_prob_reshape")
-      rpn_cls_prob = self._reshape_layer(rpn_cls_prob_reshape, self._num_anchors * 2, "rpn_cls_prob")
-      rpn_bbox_pred = slim.conv2d(rpn, self._num_anchors * 4, [1, 1], trainable=is_training,
-                                  weights_initializer=initializer,
-                                  padding='VALID', activation_fn=None, scope='rpn_bbox_pred')
-      if is_training:
-        rois, roi_scores = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred, "rois")
-        rpn_labels = self._anchor_target_layer(rpn_cls_score, "anchor")
-        # Try to have a determinestic order for the computing graph, for reproducibility
-        with tf.control_dependencies([rpn_labels]):
-          rois, _ = self._proposal_target_layer(rois, roi_scores, "rpn_rois")
-      else:
-        if cfg.TEST.MODE == 'nms':
-          rois, _ = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred, "rois")
-        elif cfg.TEST.MODE == 'top':
-          rois, _ = self._proposal_top_layer(rpn_cls_prob, rpn_bbox_pred, "rois")
-        else:
-          raise NotImplementedError
+    self._layers['head'] = self.vgg.features
 
-      # rcnn
-      if cfg.POOLING_MODE == 'crop':
-        pool5 = self._crop_pool_layer(net, rois, "pool5")
+    # rpn
+    self.rpn_net = nn.Conv2d(512, 512, [3, 3], padding=1)
+
+    self.rpn_cls_score_net = nn.Conv2d(512, self._num_anchors * 2, [1, 1])
+    
+    self.rpn_bbox_pred_net = nn.Conv2d(512, self._num_anchors * 4, [1, 1])
+
+    self.cls_score_net = nn.Linear(4096, self._num_classes)
+    self.bbox_pred_net = nn.Linear(4096, self._num_classes * 4)
+
+    self.init_weights()
+
+  def forward_prediction(self, mode):
+    net_conv = self._layers['head'](self._image)
+    self._act_summaries['conv']['value'] = net_conv
+
+    # build the anchors for the image
+    self._anchor_component(net_conv.size(2), net_conv.size(3))
+
+    rpn = F.relu(self.rpn_net(net_conv))
+    self._act_summaries['rpn']['value'] = rpn
+
+    rpn_bbox_pred = self.rpn_bbox_pred_net(rpn) 
+    rpn_cls_score = self.rpn_cls_score_net(rpn) # batch * (num_anchors * 2) * h * w
+
+    # change it so that the score has 2 as its channel size
+    rpn_cls_score_reshape = rpn_cls_score.view(self._batch_size, 2, -1, rpn_cls_score.size()[-1]) # batch * 2 * (num_anchors*h) * w
+    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape)
+    
+    # Move channel to the last dimenstion, to fit the input of python functions
+    rpn_cls_prob = rpn_cls_prob_reshape.view_as(rpn_cls_score).permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
+    rpn_cls_score = rpn_cls_score.permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
+    rpn_cls_score_reshape = rpn_cls_score_reshape.permute(0, 2, 3, 1).contiguous()  # batch * (num_anchors*h) * w * 2
+    rpn_bbox_pred = rpn_bbox_pred.permute(0, 2, 3, 1).contiguous()  # batch * h * w * (num_anchors*4)
+
+    if mode == 'TRAIN':
+      rois, roi_scores = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred) # rois, roi_scores are numpy
+      rpn_labels = self._anchor_target_layer(rpn_cls_score)
+      rois, _ = self._proposal_target_layer(rois, roi_scores)
+    else:
+      if cfg.TEST.MODE == 'nms':
+        rois, _ = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred)
+      elif cfg.TEST.MODE == 'top':
+        rois, _ = self._proposal_top_layer(rpn_cls_prob, rpn_bbox_pred)
       else:
         raise NotImplementedError
 
-      pool5_flat = slim.flatten(pool5, scope='flatten')
-      fc6 = slim.fully_connected(pool5_flat, 4096, scope='fc6')
-      if is_training:
-        fc6 = slim.dropout(fc6, keep_prob=0.5, is_training=True, scope='dropout6')
-      fc7 = slim.fully_connected(fc6, 4096, scope='fc7')
-      if is_training:
-        fc7 = slim.dropout(fc7, keep_prob=0.5, is_training=True, scope='dropout7')
-      cls_score = slim.fully_connected(fc7, self._num_classes, 
-                                       weights_initializer=initializer,
-                                       trainable=is_training,
-                                       activation_fn=None, scope='cls_score')
-      cls_prob = self._softmax_layer(cls_score, "cls_prob")
-      bbox_pred = slim.fully_connected(fc7, self._num_classes * 4, 
-                                       weights_initializer=initializer_bbox,
-                                       trainable=is_training,
-                                       activation_fn=None, scope='bbox_pred')
+    rois = Variable(torch.from_numpy(rois).float().cuda())
+    # rcnn
+    pool5 = self._roi_pool_layer(net_conv, rois)
 
-      self._predictions["rpn_cls_score"] = rpn_cls_score
-      self._predictions["rpn_cls_score_reshape"] = rpn_cls_score_reshape
-      self._predictions["rpn_cls_prob"] = rpn_cls_prob
-      self._predictions["rpn_bbox_pred"] = rpn_bbox_pred
-      self._predictions["cls_score"] = cls_score
-      self._predictions["cls_prob"] = cls_prob
-      self._predictions["bbox_pred"] = bbox_pred
-      self._predictions["rois"] = rois
+    pool5_flat = pool5.view(pool5.size(0), -1)
+    fc7 = self.vgg.classifier(pool5_flat)
 
-      self._score_summaries.update(self._predictions)
+    cls_score = self.cls_score_net(fc7)
+    cls_prob = F.softmax(cls_score)
+    bbox_pred = self.bbox_pred_net(fc7)
 
-      return rois, cls_prob, bbox_pred
+    self._predictions["rpn_cls_score"] = rpn_cls_score
+    self._predictions["rpn_cls_score_reshape"] = rpn_cls_score_reshape
+    self._predictions["rpn_cls_prob"] = rpn_cls_prob
+    self._predictions["rpn_bbox_pred"] = rpn_bbox_pred
+    self._predictions["cls_score"] = cls_score
+    self._predictions["cls_prob"] = cls_prob
+    self._predictions["bbox_pred"] = bbox_pred
+    self._predictions["rois"] = rois
 
-  def get_variables_to_restore(self, variables, var_keep_dic):
-    variables_to_restore = []
+    for k in self._predictions.keys():
+      self._score_summaries[k]['value'] = self._predictions[k]
 
-    for v in variables:
-      # exclude the conv weights that are fc weights in vgg16
-      if v.name == 'vgg_16/fc6/weights:0' or v.name == 'vgg_16/fc7/weights:0':
-        self._variables_to_fix[v.name] = v
-        continue
-      # exclude the first conv layer to swap RGB to BGR
-      if v.name == 'vgg_16/conv1/conv1_1/weights:0':
-        self._variables_to_fix[v.name] = v
-        continue
-      if v.name.split(':')[0] in var_keep_dic:
-        print('Varibles restored: %s' % v.name)
-        variables_to_restore.append(v)
+    return rois, cls_prob, bbox_pred
 
-    return variables_to_restore
-
-  def fix_variables(self, sess, pretrained_model):
-    print('Fix VGG16 layers..')
-    with tf.variable_scope('Fix_VGG16') as scope:
-      with tf.device("/cpu:0"):
-        # fix the vgg16 issue from conv weights to fc weights
-        # fix RGB to BGR
-        fc6_conv = tf.get_variable("fc6_conv", [7, 7, 512, 4096], trainable=False)
-        fc7_conv = tf.get_variable("fc7_conv", [1, 1, 4096, 4096], trainable=False)
-        conv1_rgb = tf.get_variable("conv1_rgb", [3, 3, 3, 64], trainable=False)
-        restorer_fc = tf.train.Saver({"vgg_16/fc6/weights": fc6_conv, 
-                                      "vgg_16/fc7/weights": fc7_conv,
-                                      "vgg_16/conv1/conv1_1/weights": conv1_rgb})
-        restorer_fc.restore(sess, pretrained_model)
-
-        sess.run(tf.assign(self._variables_to_fix['vgg_16/fc6/weights:0'], tf.reshape(fc6_conv, 
-                            self._variables_to_fix['vgg_16/fc6/weights:0'].get_shape())))
-        sess.run(tf.assign(self._variables_to_fix['vgg_16/fc7/weights:0'], tf.reshape(fc7_conv, 
-                            self._variables_to_fix['vgg_16/fc7/weights:0'].get_shape())))
-        sess.run(tf.assign(self._variables_to_fix['vgg_16/conv1/conv1_1/weights:0'], 
-                            tf.reverse(conv1_rgb, [2])))
+  def load_pretrained_cnn(self, state_dict):
+    self.vgg.load_state_dict({k:v for k,v in state_dict.items() if k in self.vgg.state_dict()})

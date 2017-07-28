@@ -30,6 +30,8 @@ import argparse
 from nets.vgg16 import vgg16
 from nets.resnet_v1 import resnetv1
 
+import torch
+
 CLASSES = ('__background__',
            'aeroplane', 'bicycle', 'bird', 'boat',
            'bottle', 'bus', 'car', 'cat', 'chair',
@@ -37,7 +39,7 @@ CLASSES = ('__background__',
            'motorbike', 'person', 'pottedplant',
            'sheep', 'sofa', 'train', 'tvmonitor')
 
-NETS = {'vgg16': ('vgg16_faster_rcnn_iter_70000.ckpt',),'res101': ('res101_faster_rcnn_iter_110000.ckpt',)}
+NETS = {'vgg16': ('vgg16_faster_rcnn_iter_70000.pth',),'res101': ('res101_faster_rcnn_iter_110000.pth',)}
 DATASETS= {'pascal_voc': ('voc_2007_trainval',),'pascal_voc_0712': ('voc_2007_trainval+voc_2012_trainval',)}
 
 def vis_detections(im, class_name, dets, thresh=0.5):
@@ -72,7 +74,7 @@ def vis_detections(im, class_name, dets, thresh=0.5):
     plt.tight_layout()
     plt.draw()
 
-def demo(sess, net, image_name):
+def demo(net, image_name):
     """Detect object classes in an image using pre-computed object proposals."""
 
     # Load the demo image
@@ -82,7 +84,7 @@ def demo(sess, net, image_name):
     # Detect all object classes and regress object bounds
     timer = Timer()
     timer.tic()
-    scores, boxes = im_detect(sess, net, im)
+    scores, boxes = im_detect(net, im)
     timer.toc()
     print('Detection took {:.3f}s for {:d} object proposals'.format(timer.total_time, boxes.shape[0]))
 
@@ -117,20 +119,14 @@ if __name__ == '__main__':
     # model path
     demonet = args.demo_net
     dataset = args.dataset
-    tfmodel = os.path.join('output', demonet, DATASETS[dataset][0], 'default',
+    saved_model = os.path.join('output', demonet, DATASETS[dataset][0], 'default',
                               NETS[demonet][0])
 
 
-    if not os.path.isfile(tfmodel + '.meta'):
+    if not os.path.isfile(saved_model + '.pth'):
         raise IOError(('{:s} not found.\nDid you download the proper networks from '
-                       'our server and place them properly?').format(tfmodel + '.meta'))
+                       'our server and place them properly?').format(saved_model + '.pth'))
 
-    # set config
-    tfconfig = tf.ConfigProto(allow_soft_placement=True)
-    tfconfig.gpu_options.allow_growth=True
-
-    # init session
-    sess = tf.Session(config=tfconfig)
     # load network
     if demonet == 'vgg16':
         net = vgg16(batch_size=1)
@@ -138,18 +134,21 @@ if __name__ == '__main__':
         net = resnetv1(batch_size=1, num_layers=101)
     else:
         raise NotImplementedError
-    net.create_architecture(sess, "TEST", 21,
+    net.create_architecture("TEST", 21,
                           tag='default', anchor_scales=[8, 16, 32])
-    saver = tf.train.Saver()
-    saver.restore(sess, tfmodel)
 
-    print('Loaded network {:s}'.format(tfmodel))
+    net.load_state_dict(torch.load(saved_model + '.pth'))
+
+    net.eval()
+    net.cuda()
+
+    print('Loaded network {:s}'.format(saved_model))
 
     im_names = ['000456.jpg', '000542.jpg', '001150.jpg',
                 '001763.jpg', '004545.jpg']
     for im_name in im_names:
         print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
         print('Demo for data/demo/{}'.format(im_name))
-        demo(sess, net, im_name)
+        demo(net, im_name)
 
     plt.show()

@@ -6,27 +6,35 @@
 # --------------------------------------------------------
 
 import time
+import torch
 
 class Timer(object):
     """A simple timer."""
     def __init__(self):
-        self.total_time = 0.
-        self.calls = 0
-        self.start_time = 0.
-        self.diff = 0.
-        self.average_time = 0.
+        self._total_time = {}
+        self._calls = {}
+        self._start_time = {}
+        self._diff = {}
+        self._average_time = {}
 
-    def tic(self):
+    def tic(self, name='default'):
         # using time.time instead of time.clock because time time.clock
         # does not normalize for multithreading
-        self.start_time = time.time()
+        torch.cuda.synchronize()
+        self._start_time[name] = time.time()
 
-    def toc(self, average=True):
-        self.diff = time.time() - self.start_time
-        self.total_time += self.diff
-        self.calls += 1
-        self.average_time = self.total_time / self.calls
+    def toc(self, name='default', average=True):
+        torch.cuda.synchronize()
+        self._diff[name] = time.time() - self._start_time[name]
+        self._total_time[name] = self._total_time.get(name, 0.) + self._diff[name]
+        self._calls[name] = self._calls.get(name, 0 ) + 1
+        self._average_time[name] = self._total_time[name] / self._calls[name]
         if average:
-            return self.average_time
+            return self._average_time[name]
         else:
-            return self.diff
+            return self._diff[name]
+
+    def average_time(self, name='default'):
+        return self._average_time[name]
+
+timer = Timer()

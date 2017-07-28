@@ -84,7 +84,7 @@ def _rescale_boxes(boxes, inds, scales):
 
   return boxes
 
-def im_detect(sess, net, im):
+def im_detect(net, im):
   blobs, im_scales = _get_blobs(im)
   assert len(im_scales) == 1, "Only single-image batch implemented"
 
@@ -93,7 +93,7 @@ def im_detect(sess, net, im):
   # still not sure about the scale, maybe full image it is 1.
   blobs['im_info'] = np.array([[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32)
 
-  _, scores, bbox_pred, rois = net.test_image(sess, blobs['data'], blobs['im_info'])
+  _, scores, bbox_pred, rois = net.test_image(blobs['data'], blobs['im_info'])
   
   boxes = rois[:, 1:5] / im_scales[0]
   # print(scores.shape, bbox_pred.shape, rois.shape, boxes.shape)
@@ -139,7 +139,7 @@ def apply_nms(all_boxes, thresh):
       nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()
   return nms_boxes
 
-def test_net(sess, net, imdb, weights_filename, max_per_image=100, thresh=0.05):
+def test_net(net, imdb, weights_filename, max_per_image=100, thresh=0.05):
   np.random.seed(cfg.RNG_SEED)
   """Test a Fast R-CNN network on an image database."""
   num_images = len(imdb.image_index)
@@ -157,7 +157,7 @@ def test_net(sess, net, imdb, weights_filename, max_per_image=100, thresh=0.05):
     im = cv2.imread(imdb.image_path_at(i))
 
     _t['im_detect'].tic()
-    scores, boxes = im_detect(sess, net, im)
+    scores, boxes = im_detect(net, im)
     _t['im_detect'].toc()
 
     _t['misc'].tic()
@@ -185,8 +185,8 @@ def test_net(sess, net, imdb, weights_filename, max_per_image=100, thresh=0.05):
     _t['misc'].toc()
 
     print('im_detect: {:d}/{:d} {:.3f}s {:.3f}s' \
-        .format(i + 1, num_images, _t['im_detect'].average_time,
-            _t['misc'].average_time))
+        .format(i + 1, num_images, _t['im_detect'].average_time(),
+            _t['misc'].average_time()))
 
   det_file = os.path.join(output_dir, 'detections.pkl')
   with open(det_file, 'wb') as f:

@@ -19,6 +19,8 @@ import tensorflow as tf
 from nets.vgg16 import vgg16
 from nets.resnet_v1 import resnetv1
 
+import torch
+
 def parse_args():
   """
   Parse input arguments
@@ -82,11 +84,6 @@ if __name__ == '__main__':
   imdb = get_imdb(args.imdb_name)
   imdb.competition_mode(args.comp_mode)
 
-  tfconfig = tf.ConfigProto(allow_soft_placement=True)
-  tfconfig.gpu_options.allow_growth=True
-
-  # init session
-  sess = tf.Session(config=tfconfig)
   # load network
   if args.net == 'vgg16':
     net = vgg16(batch_size=1)
@@ -100,20 +97,19 @@ if __name__ == '__main__':
     raise NotImplementedError
 
   # load model
-  net.create_architecture(sess, "TEST", imdb.num_classes, tag='default',
+  net.create_architecture("TEST", imdb.num_classes, tag='default',
                           anchor_scales=cfg.ANCHOR_SCALES,
                           anchor_ratios=cfg.ANCHOR_RATIOS)
 
+  net.eval()
+  net.cuda()
+
   if args.model:
     print(('Loading model check point from {:s}').format(args.model))
-    saver = tf.train.Saver()
-    saver.restore(sess, args.model)
+    net.load_state_dict(torch.load(args.model))
     print('Loaded.')
   else:
     print(('Loading initial weights from {:s}').format(args.weight))
-    sess.run(tf.global_variables_initializer())
     print('Loaded.')
 
-  test_net(sess, net, imdb, filename, max_per_image=args.max_per_image)
-
-  sess.close()
+  test_net(net, imdb, filename, max_per_image=args.max_per_image)
