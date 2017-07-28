@@ -287,26 +287,27 @@ class resnetv1(Network):
 
     self.init_weights()
 
-  def train(self):
+  def train(self, mode=True):
     # Override train so that the training mode is set as we want
-    nn.Module.train(self)
-    # Set fixed blocks to be in eval mode
-    self.resnet.eval()
-    self.resnet.layer1.train()
-    if cfg.RESNET.FIXED_BLOCKS >= 1:
-      self.resnet.layer2.train()
-    if cfg.RESNET.FIXED_BLOCKS >= 2:
-      self.resnet.layer3.train()
-    if cfg.RESNET.FIXED_BLOCKS >= 3:
-      self.resnet.layer4.train()
+    nn.Module.train(self, mode)
+    if mode:
+      # Set fixed blocks to be in eval mode
+      self.resnet.eval()
+      self.resnet.layer1.train()
+      if cfg.RESNET.FIXED_BLOCKS >= 1:
+        self.resnet.layer2.train()
+      if cfg.RESNET.FIXED_BLOCKS >= 2:
+        self.resnet.layer3.train()
+      if cfg.RESNET.FIXED_BLOCKS >= 3:
+        self.resnet.layer4.train()
 
-    def set_bn_eval(m):
-      classname = m.__class__.__name__
-      if classname.find('BatchNorm') != -1:
-        m.eval()
+      def set_bn_eval(m):
+        classname = m.__class__.__name__
+        if classname.find('BatchNorm') != -1:
+          m.eval()
 
-    if not cfg.RESNET.BN_TRAIN:
-      self.resnet.apply(set_bn_eval)
+      if not cfg.RESNET.BN_TRAIN:
+        self.resnet.apply(set_bn_eval)
 
   def forward_prediction(self, mode):
     net_conv = self._layers['head'](self._image)
