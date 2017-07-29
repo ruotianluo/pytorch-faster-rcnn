@@ -27,6 +27,7 @@ from layer_utils.proposal_layer import proposal_layer
 from layer_utils.proposal_top_layer import proposal_top_layer
 from layer_utils.anchor_target_layer import anchor_target_layer
 from layer_utils.proposal_target_layer import proposal_target_layer
+from utils.visualization import draw_bounding_boxes
 
 from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
 
@@ -50,25 +51,15 @@ class Network(nn.Module):
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
 
-  def _add_image_summary(self, image, boxes, name):
+  def _add_image_summary(self, image, gt_boxes, im_info, name):
     # add back mean
     image += cfg.PIXEL_MEANS
-    # bgr to rgb (opencv uses bgr)
-    channels = tf.unstack (image, axis=-1)
-    image    = tf.stack ([channels[2], channels[1], channels[0]], axis=-1)
-    # dims for normalization
-    width  = tf.to_float(tf.shape(image)[2])
-    height = tf.to_float(tf.shape(image)[1])
-    # from [x1, y1, x2, y2, cls] to normalized [y1, x1, y1, x1]
-    cols = tf.unstack(boxes, axis=1)
-    boxes = tf.stack([cols[1] / height,
-                      cols[0] / width,
-                      cols[3] / height,
-                      cols[2] / width], axis=1)
-    # add batch dimension (assume batch_size==1)
-    assert image.get_shape()[0] == 1
-    boxes = tf.expand_dims(boxes, dim=0)
-    image = tf.image.draw_bounding_boxes(image, boxes)
+    # BGR to RGB (opencv uses BGR)
+    image = tf.reverse(image, axis=[-1])
+    # use a customized visualization function to visualize the boxes
+    image = tf.py_func(draw_bounding_boxes, 
+                      [image, gt_boxes, im_info],
+                      tf.float32)
     
     return tf.summary.image(name, image)
 
@@ -95,7 +86,7 @@ class Network(nn.Module):
                                      self._feat_stride, self._anchors, self._num_anchors)
     return rois, rpn_scores
 
-  # Only use it if you have roi_pooling op written in tf.image
+  # Only use it if you have roi_pooling op written in tf.images
   def _roi_pool_layer(self, bottom, rois):
     return RoIPoolFunction(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1. / 16.)(bottom, rois)
 
@@ -146,7 +137,7 @@ class Network(nn.Module):
     self._anchors = anchors
     self._anchor_length = anchor_length
 
-  def build_network(self):
+  def _build_network(self):
     raise NotImplementedError
 
   def _smooth_l1_loss(self, bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights, sigma=1.0, dim=[1]):
@@ -209,6 +200,61 @@ class Network(nn.Module):
 
     return loss
 
+  def _region_proposal(self, net_conv):
+    rpn = F.relu(self.rpn_net(net_conv))
+    self._act_summaries['rpn']['value'] = rpn
+
+    rpn_cls_score = self.rpn_cls_score_net(rpn) # batch * (num_anchors * 2) * h * w
+
+    # change it so that the score has 2 as its channel size
+    rpn_cls_score_reshape = rpn_cls_score.view(self._batch_size, 2, -1, rpn_cls_score.size()[-1]) # batch * 2 * (num_anchors*h) * w
+    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape)
+    
+    # Move channel to the last dimenstion, to fit the input of python functions
+    rpn_cls_prob = rpn_cls_prob_reshape.view_as(rpn_cls_score).permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
+    rpn_cls_score = rpn_cls_score.permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
+    rpn_cls_score_reshape = rpn_cls_score_reshape.permute(0, 2, 3, 1).contiguous()  # batch * (num_anchors*h) * w * 2
+    rpn_cls_pred = torch.max(rpn_cls_score_reshape.view(-1, 2), 1)[1]
+
+    rpn_bbox_pred = self.rpn_bbox_pred_net(rpn)
+    rpn_bbox_pred = rpn_bbox_pred.permute(0, 2, 3, 1).contiguous()  # batch * h * w * (num_anchors*4)
+
+    if self._mode == 'TRAIN':
+      rois, roi_scores = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred) # rois, roi_scores are numpy
+      rpn_labels = self._anchor_target_layer(rpn_cls_score)
+      rois, _ = self._proposal_target_layer(rois, roi_scores)
+    else:
+      if cfg.TEST.MODE == 'nms':
+        rois, _ = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred)
+      elif cfg.TEST.MODE == 'top':
+        rois, _ = self._proposal_top_layer(rpn_cls_prob, rpn_bbox_pred)
+      else:
+        raise NotImplementedError
+
+    rois = Variable(torch.from_numpy(rois).float().cuda())
+
+    self._predictions["rpn_cls_score"] = rpn_cls_score
+    self._predictions["rpn_cls_score_reshape"] = rpn_cls_score_reshape
+    self._predictions["rpn_cls_prob"] = rpn_cls_prob
+    self._predictions["rpn_cls_pred"] = rpn_cls_pred
+    self._predictions["rpn_bbox_pred"] = rpn_bbox_pred
+    self._predictions["rois"] = rois
+
+    return rois
+
+  def _region_classification(self, fc7):
+    cls_score = self.cls_score_net(fc7)
+    cls_pred = torch.max(cls_score, 1)[1]
+    cls_prob = F.softmax(cls_score)
+    bbox_pred = self.bbox_pred_net(fc7)
+
+    self._predictions["cls_score"] = cls_score
+    self._predictions["cls_pred"] = cls_pred
+    self._predictions["cls_prob"] = cls_prob
+    self._predictions["bbox_pred"] = bbox_pred
+
+    return cls_prob, bbox_pred
+
   def create_architecture(self, num_classes, tag=None,
                           anchor_scales=(8, 16, 32), anchor_ratios=(0.5, 1, 2)):
     self._tag = tag
@@ -225,10 +271,10 @@ class Network(nn.Module):
     assert tag != None
 
     # Initialize layers
-    self.build_network()
-    self.init_summary_op()
+    self._build_network()
+    self._init_summary_op()
 
-  def init_summary_op(self):
+  def _init_summary_op(self):
     """
     Handle summaries Notes:
     Here we still use original tensorflow tensorboard to do summary.
@@ -253,8 +299,8 @@ class Network(nn.Module):
     #_proposal_targets
     score_summaries_keys += ['rois', 'labels', 'bbox_targets', 'bbox_inside_weights', 'bbox_outside_weights']
     #_predictions
-    score_summaries_keys += ["rpn_cls_score", "rpn_cls_score_reshape", "rpn_cls_prob", "rpn_bbox_pred", \
-                "cls_score", "cls_prob", "bbox_pred", "rois"]
+    score_summaries_keys += ["rpn_cls_score", "rpn_cls_score_reshape", "rpn_cls_prob", "rpn_cls_pred", "rpn_bbox_pred", \
+                "cls_score", "cls_pred", "cls_prob", "bbox_pred", "rois"]
     for key in score_summaries_keys:
       self._score_summaries[key] = {'placeholder': tf.placeholder(tf.float32, name=key)}
 
@@ -264,7 +310,8 @@ class Network(nn.Module):
 
 
     self._image_gt_summaries = {'image':{'placeholder': tf.placeholder(tf.float32, shape=[self._batch_size, None, None, 3])},\
-                                'gt_boxes':{'placeholder': tf.placeholder(tf.float32, shape=[None, 5])}}
+                                'gt_boxes':{'placeholder': tf.placeholder(tf.float32, shape=[None, 5])},
+                                'im_info':{'placeholder': tf.placeholder(tf.float32, shape=[None, 3])}}
 
     # Add train summaries
     for k, var in dict(self.named_parameters()).items():
@@ -273,8 +320,10 @@ class Network(nn.Module):
 
     val_summaries = []
     with tf.device("/cpu:0"):
-      val_summaries.append(self._add_image_summary(self._image_gt_summaries['image']['placeholder'], 
-        self._image_gt_summaries['gt_boxes']['placeholder'], 'ground truth'))
+      val_summaries.append(self._add_image_summary(
+        self._image_gt_summaries['image']['placeholder'],
+        self._image_gt_summaries['gt_boxes']['placeholder'],
+        self._image_gt_summaries['im_info']['placeholder'], 'ground truth'))
       for key, var in self._event_summaries.items():
         val_summaries.append(tf.summary.scalar(key, var['placeholder']))
       for key, var in self._score_summaries.items():
@@ -288,7 +337,7 @@ class Network(nn.Module):
     self._summary_op_val = tf.summary.merge(val_summaries)
 
 
-  def run_summary_op(self, sess, val=False):
+  def _run_summary_op(self, sess, val=False):
     """
     Run the summary operator: feed the placeholders with corresponding newtork outputs(activations)
     """
@@ -321,6 +370,7 @@ class Network(nn.Module):
   def forward(self, image, im_info, gt_boxes=None, mode='TRAIN'):
     self._image_gt_summaries['image']['value'] = image
     self._image_gt_summaries['gt_boxes']['value'] = gt_boxes
+    self._image_gt_summaries['im_info']['value'] = im_info
 
     self._image = Variable(torch.from_numpy(image.transpose([0,3,1,2])).cuda(), volatile=mode == 'TEST')
     self._im_info = im_info # no nned to conver to variable
@@ -380,7 +430,7 @@ class Network(nn.Module):
     self.eval()
     self.forward(blobs['data'], blobs['im_info'], blobs['gt_boxes'])
     self.train()
-    summary = self.run_summary_op(sess, True)
+    summary = self._run_summary_op(sess, True)
 
     return summary
 
@@ -411,7 +461,7 @@ class Network(nn.Module):
     train_op.zero_grad()
     self._losses['total_loss'].backward()
     train_op.step()
-    summary = self.run_summary_op(sess)
+    summary = self._run_summary_op(sess)
 
     self.delete_intermediate_states()
 

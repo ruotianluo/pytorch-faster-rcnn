@@ -70,11 +70,11 @@ class SolverWrapper(object):
     st0 = np.random.get_state()
     # current position in the database
     cur = self.data_layer._cur
-    # current shuffled indeces of the database
+    # current shuffled indexes of the database
     perm = self.data_layer._perm
     # current position in the validation database
     cur_val = self.data_layer_val._cur
-    # current shuffled indeces of the validation database
+    # current shuffled indexes of the validation database
     perm_val = self.data_layer_val._perm
 
     # Dump the meta info
@@ -149,10 +149,10 @@ class SolverWrapper(object):
       ss_paths = [ss_paths[-1]]
       np_paths = [np_paths[-1]]
 
-      print('Restorining model snapshots from {:s}'.format(sfiles[-1]))
+      print('Restoring model snapshots from {:s}'.format(sfiles[-1]))
       self.net.load_state_dict(torch.load(str(sfiles[-1])))
       print('Restored.')
-      # Needs to restore the other hyperparameters/states for training, (TODO xinlei) I have
+      # Needs to restore the other hyper-parameters/states for training, (TODO xinlei) I have
       # tried my best to find the random states so that it can be recovered exactly
       # However the Tensorflow state is currently not available
       with open(str(nfiles[-1]), 'rb') as fid:
