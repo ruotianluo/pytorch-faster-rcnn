@@ -60,7 +60,8 @@ class vgg16(Network):
     rois = self._region_proposal(net_conv)
     pool5 = self._roi_pool_layer(net_conv, rois)
 
-    fc7 = self.resnet.layer4(pool5).mean(3).squeeze(3).mean(2).squeeze(2) # average pooling after layer4
+    pool5_flat = pool5.view(pool5.size(0), -1)
+    fc7 = self.vgg.classifier(pool5_flat)
 
     cls_prob, bbox_pred = self._region_classification(fc7)
     
