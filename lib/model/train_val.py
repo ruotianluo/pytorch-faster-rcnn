@@ -94,7 +94,9 @@ class SolverWrapper(object):
     self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
     # Determine different scales for anchors, see paper
 
-     # Build the main computation graph
+    # Set the random seed
+    torch.manual_seed(cfg.RNG_SEED)
+    # Build the main computation graph
     self.net.create_architecture(self.imdb.num_classes, tag='default',
                                             anchor_scales=cfg.ANCHOR_SCALES,
                                             anchor_ratios=cfg.ANCHOR_RATIOS)
