@@ -51,7 +51,7 @@ class Network(nn.Module):
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
 
-  def _add_image_summary(self, image, gt_boxes, im_info, name):
+  def _add_gt_image_summary(self, image, gt_boxes, im_info):
     # add back mean
     image += cfg.PIXEL_MEANS
     # BGR to RGB (opencv uses BGR)
@@ -61,7 +61,7 @@ class Network(nn.Module):
                       [image, gt_boxes, im_info],
                       tf.float32)
     
-    return tf.summary.image(name, image)
+    return tf.summary.image('ground truth', image)
 
   def _add_act_summary(self, tensor):
     tf.summary.histogram('ACT/' + tensor.op.name + '/activations', tensor)
@@ -320,10 +320,10 @@ class Network(nn.Module):
 
     val_summaries = []
     with tf.device("/cpu:0"):
-      val_summaries.append(self._add_image_summary(
+      val_summaries.append(self._add_gt_image_summary(
         self._image_gt_summaries['image']['placeholder'],
         self._image_gt_summaries['gt_boxes']['placeholder'],
-        self._image_gt_summaries['im_info']['placeholder'], 'ground truth'))
+        self._image_gt_summaries['im_info']['placeholder']))
       for key, var in self._event_summaries.items():
         val_summaries.append(tf.summary.scalar(key, var['placeholder']))
       for key, var in self._score_summaries.items():
@@ -397,11 +397,12 @@ class Network(nn.Module):
         m.weight.data.normal_().fmod_(2).mul_(stddev).add_(mean) # not a perfect approximation
       else:
         m.weight.data.normal_(mean, stddev)
+      m.bias.data.zero_()
       
     normal_init(self.rpn_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
     normal_init(self.rpn_cls_score_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
     normal_init(self.rpn_bbox_pred_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
-    normal_init(self.cls_score_net, 0, 0.001, cfg.TRAIN.TRUNCATED)
+    normal_init(self.cls_score_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
     normal_init(self.bbox_pred_net, 0, 0.001, cfg.TRAIN.TRUNCATED)
 
   # Extract the head feature maps, for example for vgg16 it is conv5_3
