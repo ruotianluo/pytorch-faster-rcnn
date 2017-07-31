@@ -121,14 +121,18 @@ class SolverWrapper(object):
     sfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pth')
     sfiles = glob.glob(sfiles)
     sfiles.sort(key=os.path.getmtime)
-    # Get the snapshot name in TensorFlow
-    redstr = '_iter_{:d}.'.format(cfg.TRAIN.STEPSIZE+1)
-    sfiles = [ss for ss in sfiles if redstr not in ss]
+    # Get the snapshot name in pytorch
+    redfiles = []
+    for stepsize in cfg.TRAIN.STEPSIZE:
+      redfiles.append(os.path.join(self.output_dir, 
+                      cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_{:d}.pth'.format(stepsize+1)))
+    sfiles = [ss for ss in sfiles if ss not in redfiles]
 
     nfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pkl')
     nfiles = glob.glob(nfiles)
     nfiles.sort(key=os.path.getmtime)
-    nfiles = [nn for nn in nfiles if redstr not in nn]
+    redfiles = [redfile.replace('.pth', '.pkl') for redfile in redfiles]
+    nfiles = [nn for nn in nfiles if nn not in redfiles]
 
     lsf = len(sfiles)
     assert len(nfiles) == lsf
@@ -144,8 +148,9 @@ class SolverWrapper(object):
       # Need to fix the variables before loading, so that the RGB weights are changed to BGR
       # For VGG16 it also changes the convolutional weights fc6 and fc7 to
       # fully connected weights
-      lr = cfg.TRAIN.LEARNING_RATE
+      lr_scale = 1
       last_snapshot_iter = 0
+      stepsizes = list(cfg.TRAIN.STEPSIZE)
     else:
       # Get the most recent snapshot and restore
       ss_paths = [ss_paths[-1]]
@@ -171,26 +176,33 @@ class SolverWrapper(object):
         self.data_layer_val._cur = cur_val
         self.data_layer_val._perm = perm_val
 
-        # Set the learning rate, only reduce once
-        if last_snapshot_iter > cfg.TRAIN.STEPSIZE:
-          lr = cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA
-          scale_lr(self.optimizer, cfg.TRAIN.GAMMA)
+      # Set the learning rate
+      lr_scale = 1
+      stepsizes = []
+      for stepsize in cfg.TRAIN.STEPSIZE:
+        if last_snapshot_iter > stepsize:
+          lr_scale *= cfg.TRAIN.GAMMA
         else:
-          lr = cfg.TRAIN.LEARNING_RATE
+          stepsizes.append(stepsize)
+      scale_lr(self.optimizer, lr_scale)
 
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
+    stepsizes.append(max_iters)
+    stepsizes.reverse()
+    next_stepsize = stepsizes.pop()
 
     self.net.train()
     self.net.cuda()
 
     while iter < max_iters + 1:
       # Learning rate
-      if iter == cfg.TRAIN.STEPSIZE + 1:
+      if iter == next_stepsize + 1:
         # Add snapshot here before reducing the learning rate
         self.snapshot(iter)
-        lr =  cfg.TRAIN.LEARNING_RATE * cfg.TRAIN.GAMMA
-        scale_lr(self.optimizer, cfg.TRAIN.GAMMA)
+        lr_scale *= cfg.TRAIN.GAMMA
+        scale_lr(self.optimizer, lr_scale)
+        next_stepsize = stepsizes.pop()
 
       utils.timer.timer.tic()
       # Get training data, one batch at a time
