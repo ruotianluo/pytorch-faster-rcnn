@@ -397,7 +397,7 @@ class Network(nn.Module):
         m.weight.data.normal_().fmod_(2).mul_(stddev).add_(mean) # not a perfect approximation
       else:
         m.weight.data.normal_(mean, stddev)
-      m.bias.zero_()
+      m.bias.data.zero_()
       
     normal_init(self.rpn_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
     normal_init(self.rpn_cls_score_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
