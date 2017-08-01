@@ -148,7 +148,6 @@ class SolverWrapper(object):
       # Need to fix the variables before loading, so that the RGB weights are changed to BGR
       # For VGG16 it also changes the convolutional weights fc6 and fc7 to
       # fully connected weights
-      lr_scale = 1
       last_snapshot_iter = 0
       stepsizes = list(cfg.TRAIN.STEPSIZE)
     else:
@@ -185,6 +184,7 @@ class SolverWrapper(object):
         else:
           stepsizes.append(stepsize)
       scale_lr(self.optimizer, lr_scale)
+      lr *= lr_scale
 
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
@@ -200,8 +200,8 @@ class SolverWrapper(object):
       if iter == next_stepsize + 1:
         # Add snapshot here before reducing the learning rate
         self.snapshot(iter)
-        lr_scale *= cfg.TRAIN.GAMMA
-        scale_lr(self.optimizer, lr_scale)
+        lr *= cfg.TRAIN.GAMMA
+        scale_lr(self.optimizer, cfg.TRAIN.GAMMA)
         next_stepsize = stepsizes.pop()
 
       utils.timer.timer.tic()
