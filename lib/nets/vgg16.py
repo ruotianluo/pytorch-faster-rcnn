@@ -36,7 +36,8 @@ class vgg16(Network):
     for layer in range(10):
       for p in self.vgg.features[layer].parameters(): p.requires_grad = False
 
-    self._layers['head'] = self.vgg.features
+    # not using the last maxpool layer
+    self._layers['head'] = nn.Sequential(*list(self.vgg.features._modules.values())[:-1])
 
     # rpn
     self.rpn_net = nn.Conv2d(512, 512, [3, 3], padding=1)
