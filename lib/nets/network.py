@@ -86,9 +86,42 @@ class Network(nn.Module):
                                      self._feat_stride, self._anchors, self._num_anchors)
     return rois, rpn_scores
 
-  # Only use it if you have roi_pooling op written in tf.images
   def _roi_pool_layer(self, bottom, rois):
     return RoIPoolFunction(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1. / 16.)(bottom, rois)
+
+  def _crop_pool_layer(self, bottom, rois):
+    # implement it using stn
+    # box to affine
+    # input (x1,y1,x2,y2)
+    """
+    [  x2-x1             x1 + x2 - W + 1  ]
+    [  -----      0      ---------------  ]
+    [  W - 1                  W - 1       ]
+    [                                     ]
+    [           y2-y1    y1 + y2 - H + 1  ]
+    [    0      -----    ---------------  ]
+    [           H - 1         H - 1      ]
+    """
+
+    x1 = rois.data[:, 1] / 16.0
+    y1 = rois.data[:, 2] / 16.0
+    x2 = rois.data[:, 3] / 16.0
+    y2 = rois.data[:, 4] / 16.0
+
+    height = bottom.size(2)
+    width = bottom.size(3)
+
+    # affine theta
+    theta = rois.data.new(rois.size(0), 2, 3).zero_()
+    theta[:, 0, 0] = (x2 - x1) / (width - 1)
+    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
+    theta[:, 1, 1] = (y2 - y1) / (height - 1)
+    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
+
+    pre_pool_size = cfg.POOLING_SIZE * 2
+    grid = F.affine_grid(Variable(theta), torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
+    crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
+    return F.max_pool2d(crops, 2, 2)
 
   def _anchor_target_layer(self, rpn_cls_score):
     rpn_labels, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights = \

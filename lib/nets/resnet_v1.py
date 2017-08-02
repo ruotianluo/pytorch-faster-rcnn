@@ -237,6 +237,46 @@ class resnetv1(Network):
     Network.__init__(self, batch_size=batch_size)
     self._num_layers = num_layers
 
+  def _crop_pool_layer(self, bottom, rois):
+    # implement it using stn
+    # box to affine
+    # input (x1,y1,x2,y2)
+    """
+    [  x2-x1             x1 + x2 - W + 1  ]
+    [  -----      0      ---------------  ]
+    [  W - 1                  W - 1       ]
+    [                                     ]
+    [           y2-y1    y1 + y2 - H + 1  ]
+    [    0      -----    ---------------  ]
+    [           H - 1         H - 1      ]
+    """
+
+    x1 = rois.data[:, 1] / 16.0
+    y1 = rois.data[:, 2] / 16.0
+    x2 = rois.data[:, 3] / 16.0
+    y2 = rois.data[:, 4] / 16.0
+
+    height = bottom.size(2)
+    width = bottom.size(3)
+
+    # affine theta
+    theta = rois.data.new(rois.size(0), 2, 3).zero_()
+    theta[:, 0, 0] = (x2 - x1) / (width - 1)
+    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
+    theta[:, 1, 1] = (y2 - y1) / (height - 1)
+    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
+
+    if cfg.RESNET.MAX_POOL:
+      pre_pool_size = cfg.POOLING_SIZE * 2
+      grid = F.affine_grid(Variable(theta), torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
+      crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
+      crops = F.max_pool2d(crops, 2, 2)
+    else:
+      grid = F.affine_grid(Variable(theta), torch.Size((rois.size(0), 1, cfg.POOLING_SIZE, cfg.POOLING_SIZE)))
+      crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
+    
+    return crops
+
   def _build_network(self):
     # choose different blocks for different number of layers
     if self._num_layers == 50:
@@ -317,7 +357,11 @@ class resnetv1(Network):
     self._anchor_component(net_conv.size(2), net_conv.size(3))
    
     rois = self._region_proposal(net_conv)
-    pool5 = self._roi_pool_layer(net_conv, rois)
+    if cfg.POOLING_MODE == 'crop':
+      pool5 = self._crop_pool_layer(net_conv, rois)
+    else:
+      pool5 = self._roi_pool_layer(net_conv, rois)
+    
 
     fc7 = self.resnet.layer4(pool5).mean(3).mean(2) # average pooling after layer4
 

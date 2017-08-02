@@ -59,7 +59,10 @@ class vgg16(Network):
     self._anchor_component(net_conv.size(2), net_conv.size(3))
    
     rois = self._region_proposal(net_conv)
-    pool5 = self._roi_pool_layer(net_conv, rois)
+    if cfg.POOLING_MODE == 'crop':
+      pool5 = self._crop_pool_layer(net_conv, rois)
+    else:
+      pool5 = self._roi_pool_layer(net_conv, rois)
 
     pool5_flat = pool5.view(pool5.size(0), -1)
     fc7 = self.vgg.classifier(pool5_flat)
