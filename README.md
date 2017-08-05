@@ -3,18 +3,21 @@ A pytorch implementation of faster RCNN detection framework based on Xinlei Chen
 
 **Note**: Several minor modifications are made when reimplementing the framework, which give potential improvements. For details about the modifications and ablative analysis, please refer to the technical report [An Implementation of Faster RCNN with Study for Region Sampling](https://arxiv.org/pdf/1702.02138.pdf). If you are seeking to reproduce the results in the original paper, please use the [official code](https://github.com/ShaoqingRen/faster_rcnn) or maybe the [semi-official code](https://github.com/rbgirshick/py-faster-rcnn). For details about the faster RCNN architecture please refer to the paper [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](http://arxiv.org/pdf/1506.01497.pdf).
 
+### TODO:
+trainable crop_and_resize
+
 ### Detection Performance
 The current code supports **VGG16**, **Resnet V1** and ~~**Mobilenet V1**~~ models. We mainly tested it on plain VGG16 and Resnet101 architecture. As the baseline, we report numbers using a single model on a single convolution layer, so no multi-scale, no multi-stage bounding box regression, no skip-connection, no extra input is used. The only data augmentation technique is left-right flipping during training following the original Faster RCNN. All models are released.
 
 With VGG16 (``conv5_3``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **69.95** (**71.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test ([R-FCN](https://github.com/daijifeng001/R-FCN) schedule), ~~**75.3**~~.
-  - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k),~~**29.5**~~.
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **70.48**(crop and resize), **69.95**(roi pooling) (**71.2** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test ([R-FCN](https://github.com/daijifeng001/R-FCN) schedule), **74.83**(crop and resize) **74.59**(roi pooling)(**75.3** for tf-faster-rcnn).
+  - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (350k/490k), **24.6**(crop and resize) **21.8**(roi pooling) (**29.5** for tf-faster-rcnn with more iterations (900k/1190k)).
 
 With Resnet101 (last ``conv4``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **74.72** (**75.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.87** (**79.3** for tf-faster-rcnn).
-  - Train on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**34.1**~~.
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **73.01**(crop and resize) **74.72**(roi pooling) (**75.2** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **77.67**(crop and resize) **78.87**(roi pooling) (**79.3** for tf-faster-rcnn).
+  - Train on COCO 2014 trainval35k and test on minival (350k/490k), **30.3**(crop and resize) **28.2**(roi pooling) （**34.1** for tf-faster-rcnn with more iterations (900k/1190k)).
 
 More Resnets:
   - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**31.6**~~.
@@ -34,7 +37,7 @@ Approximate *baseline* [setup](https://github.com/endernewton/tf-faster-rcnn/blo
   - For COCO, we find the performance improving with more iterations (VGG16 350k/490k: 26.9, 600k/790k: 28.3, 900k/1190k: 29.5), and potentially better performance can be achieved with even more iterations.
   - For Resnets, we fix the first block (total 4) when fine-tuning the network, and only use ~~``crop_and_resize``~~ roi pooling to resize the RoIs (7x7) without max-pool (~~which I find useless especially for COCO~~). The final feature maps are average-pooled for classification and regression. All batch normalization parameters are fixed. Weight decay is set to Renset101 default 1e-4. Learning rate for biases is not doubled.
   - For approximate [FPN](https://arxiv.org/abs/1612.03144) baseline setup we simply resize the image with 800 pixels, add 32^2 anchors, and take 1000 proposals during testing.
-  - ~~Check out [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/)/[here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/)/[here](https://drive.google.com/open?id=0B1_fAEgxdnvJSmF3YUlZcHFqWTQ) for the latest models, including longer COCO VGG16 models and Resnet ones~~.
+  - Check out ~~[here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/)/[here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/)/~~[here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8) for the latest models, including longer COCO VGG16 models and Resnet ones.
 
 ### Additional features
 Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.02138.pdf) are added to make research life easier:
@@ -43,7 +46,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   - **Support for visualization**. The current implementation will summarize ground truth detections, statistics of losses, activations and variables during training, and dump it to a separate folder for tensorboard visualization. The computing graph is also saved for debugging.
 
 ### Prerequisites
-  - A basic pytorch installation. The code follows **0.1.12** format. We will update to 0.2 after 0.2 is officially released.
+  - A basic pytorch installation. The code follows **0.2**. If you are using old **0.1.12**, you can checkout 0.1.12 branch.
   - Python packages you might not have: `cython`, `opencv-python`, `easydict` (similar to [py-faster-rcnn](https://github.com/rbgirshick/py-faster-rcnn)). For `easydict` make sure you have the right version. I use 1.6.
   - ~~Docker users: Since the recent upgrade, the docker image on docker hub (https://hub.docker.com/r/mbuckler/tf-faster-rcnn-deps/) is no longer valid. However, you can still build your own image by using dockerfile located at `docker` folder (cuda 8 version, as it is required by Tensorflow r1.0.) And make sure following Tensorflow installation to install and use nvidia-docker[https://github.com/NVIDIA/nvidia-docker]. Last, after launching the container, you have to build the Cython modules within the running container.~~
 
@@ -100,15 +103,15 @@ Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgir
 
 If you find it useful, the ``data/cache`` folder created on my side is also shared [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/cache.tgz).
 
-### ~~Demo and Test with pre-trained models~~ (not supported yet)
-1. Download pre-trained model
+### Demo and Test with pre-trained models
+1. Download pre-trained model (only google drive works)
   ```Shell
   # Resnet101 for voc pre-trained on 07+12 set
-  ./data/scripts/fetch_faster_rcnn_models.sh
+  # ./data/scripts/fetch_faster_rcnn_models.sh
   ```
   **Note**: if you cannot download the models through the link, or you want to try more models, you can check out the following solutions and optionally update the downloading script:
-  - Another server [here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/).
-  - Google drive [here](https://drive.google.com/open?id=0B1_fAEgxdnvJSmF3YUlZcHFqWTQ).
+  - ~~Another server [here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/).~~
+  - Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8).
 
 2. Create a folder and a softlink to use the pre-trained model
   ```Shell
