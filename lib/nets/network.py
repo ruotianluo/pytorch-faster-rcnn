@@ -99,24 +99,27 @@ class Network(nn.Module):
     [           H - 1         H - 1      ]
     """
 
-    x1 = rois.data[:, 1] / 16.0
-    y1 = rois.data[:, 2] / 16.0
-    x2 = rois.data[:, 3] / 16.0
-    y2 = rois.data[:, 4] / 16.0
+    x1 = rois[:, 1::4] / 16.0
+    y1 = rois[:, 2::4] / 16.0
+    x2 = rois[:, 3::4] / 16.0
+    y2 = rois[:, 4::4] / 16.0
 
     height = bottom.size(2)
     width = bottom.size(3)
 
     # affine theta
-    theta = rois.data.new(rois.size(0), 2, 3).zero_()
-    theta[:, 0, 0] = (x2 - x1) / (width - 1)
-    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
-    theta[:, 1, 1] = (y2 - y1) / (height - 1)
-    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
+    zero = rois.data.new(rois.size(0), 1).zero_()
+    theta = torch.cat([\
+      (x2 - x1) / (width - 1),
+      zero,
+      (x1 + x2 - width + 1) / (width - 1),
+      zero,
+      (y2 - y1) / (height - 1),
+      (y1 + y2 - height + 1) / (height - 1)], 1).view(-1, 2, 3)
 
     if max_pool:
       pre_pool_size = cfg.POOLING_SIZE * 2
-      grid = F.affine_grid(Variable(theta), torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
+      grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
       crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
       crops = F.max_pool2d(crops, 2, 2)
     else:
