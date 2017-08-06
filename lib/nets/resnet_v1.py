@@ -7,15 +7,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-from tensorflow.contrib.slim import losses
-from tensorflow.contrib.slim import arg_scope
-from tensorflow.contrib.slim.python.slim.nets import resnet_utils
-from tensorflow.contrib.slim.python.slim.nets import resnet_v1
-from tensorflow.contrib.slim.python.slim.nets.resnet_v1 import resnet_v1_block
-import numpy as np
-
 from nets.network import Network
 from model.config import cfg
 

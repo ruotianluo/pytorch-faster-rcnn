@@ -21,7 +21,6 @@ from model.test import im_detect
 from model.nms_wrapper import nms
 
 from utils.timer import Timer
-import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 import os, cv2
