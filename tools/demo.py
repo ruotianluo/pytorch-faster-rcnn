@@ -85,7 +85,7 @@ def demo(net, image_name):
     timer.tic()
     scores, boxes = im_detect(net, im)
     timer.toc()
-    print('Detection took {:.3f}s for {:d} object proposals'.format(timer.total_time, boxes.shape[0]))
+    print('Detection took {:.3f}s for {:d} object proposals'.format(timer.total_time(), boxes.shape[0]))
 
     # Visualize detections for each class
     CONF_THRESH = 0.8
@@ -122,9 +122,9 @@ if __name__ == '__main__':
                               NETS[demonet][0])
 
 
-    if not os.path.isfile(saved_model + '.pth'):
+    if not os.path.isfile(saved_model):
         raise IOError(('{:s} not found.\nDid you download the proper networks from '
-                       'our server and place them properly?').format(saved_model + '.pth'))
+                       'our server and place them properly?').format(saved_model))
 
     # load network
     if demonet == 'vgg16':
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     net.create_architecture(21,
                           tag='default', anchor_scales=[8, 16, 32])
 
-    net.load_state_dict(torch.load(saved_model + '.pth'))
+    net.load_state_dict(torch.load(saved_model))
 
     net.eval()
     net.cuda()

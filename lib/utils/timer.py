@@ -37,4 +37,7 @@ class Timer(object):
     def average_time(self, name='default'):
         return self._average_time[name]
 
+    def total_time(self, name='default'):
+        return self._total_time[name]
+
 timer = Timer()
