@@ -108,7 +108,7 @@ class Network(nn.Module):
     width = bottom.size(3)
 
     # affine theta
-    zero = rois.data.new(rois.size(0), 1).zero_()
+    zero = Variable(rois.data.new(rois.size(0), 1).zero_())
     theta = torch.cat([\
       (x2 - x1) / (width - 1),
       zero,
