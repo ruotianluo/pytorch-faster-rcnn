@@ -337,7 +337,7 @@ def filter_roidb(roidb):
 def train_net(network, imdb, roidb, valroidb, output_dir, tb_dir,
               pretrained_model=None,
               max_iters=40000):
-  """Train a Fast R-CNN network."""
+  """Train a Faster R-CNN network."""
   roidb = filter_roidb(roidb)
   valroidb = filter_roidb(valroidb)
   with tf.Session(config=tf.ConfigProto(device_count = {'GPU': 0})) as sess:
