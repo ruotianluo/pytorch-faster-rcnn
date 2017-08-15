@@ -175,9 +175,6 @@ class Network(nn.Module):
     self._anchors = anchors
     self._anchor_length = anchor_length
 
-  def _build_network(self):
-    raise NotImplementedError
-
   def _smooth_l1_loss(self, bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights, sigma=1.0, dim=[1]):
     sigma_2 = sigma ** 2
     box_diff = bbox_pred - bbox_targets
@@ -293,6 +290,12 @@ class Network(nn.Module):
 
     return cls_prob, bbox_pred
 
+  def _image_to_head(self):
+    raise NotImplementedError
+
+  def _head_to_tail(self, pool5):
+    raise NotImplementedError
+
   def create_architecture(self, num_classes, tag=None,
                           anchor_scales=(8, 16, 32), anchor_ratios=(0.5, 1, 2)):
     self._tag = tag
@@ -309,7 +312,7 @@ class Network(nn.Module):
     assert tag != None
 
     # Initialize layers
-    self._build_network()
+    self._init_modules()
     self._init_summary_op()
 
   def _init_summary_op(self):
@@ -405,6 +408,28 @@ class Network(nn.Module):
     else:
       return sess.run(self._summary_op_val, feed_dict=feed_dict)
 
+  def _predict(self, mode):
+    # This is just _build_network in tf-faster-rcnn
+    net_conv = self._image_to_head()
+
+    # build the anchors for the image
+    self._anchor_component(net_conv.size(2), net_conv.size(3))
+   
+    rois = self._region_proposal(net_conv)
+    if cfg.POOLING_MODE == 'crop':
+      pool5 = self._crop_pool_layer(net_conv, rois)
+    else:
+      pool5 = self._roi_pool_layer(net_conv, rois)
+
+    fc7 = self._head_to_tail(pool5)
+
+    cls_prob, bbox_pred = self._region_classification(fc7)
+    
+    for k in self._predictions.keys():
+      self._score_summaries[k]['value'] = self._predictions[k]
+
+    return rois, cls_prob, bbox_pred
+
   def forward(self, image, im_info, gt_boxes=None, mode='TRAIN'):
     self._image_gt_summaries['image']['value'] = image
     self._image_gt_summaries['gt_boxes']['value'] = gt_boxes
@@ -416,7 +441,7 @@ class Network(nn.Module):
 
     self._mode = mode
 
-    rois, cls_prob, bbox_pred = self.forward_prediction(mode)
+    rois, cls_prob, bbox_pred = self._predict(mode)
 
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)

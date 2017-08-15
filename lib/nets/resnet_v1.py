@@ -228,7 +228,20 @@ class resnetv1(Network):
     Network.__init__(self, batch_size=batch_size)
     self._num_layers = num_layers
 
-  def _build_network(self):
+  def _crop_pool_layer(self, bottom, rois):
+    return Network._crop_pool_layer(self, bottom, rois, cfg.RESNET.MAX_POOL)
+
+  def _image_to_head(self):
+    net_conv = self._layers['head'](self._image)
+    self._act_summaries['conv']['value'] = net_conv
+
+    return net_conv
+
+  def _head_to_tail(self, pool5):
+    fc7 = self.resnet.layer4(pool5).mean(3).mean(2) # average pooling after layer4
+    return fc7
+
+  def _init_modules(self):
     # choose different blocks for different number of layers
     if self._num_layers == 50:
       self.resnet = resnet50()
@@ -297,29 +310,6 @@ class resnetv1(Network):
           m.eval()
 
       self.resnet.apply(set_bn_eval)
-
-  def forward_prediction(self, mode):
-    net_conv = self._layers['head'](self._image)
-    self._act_summaries['conv']['value'] = net_conv
-
-    # build the anchors for the image
-    self._anchor_component(net_conv.size(2), net_conv.size(3))
-   
-    rois = self._region_proposal(net_conv)
-    if cfg.POOLING_MODE == 'crop':
-      pool5 = self._crop_pool_layer(net_conv, rois, cfg.RESNET.MAX_POOL)
-    else:
-      pool5 = self._roi_pool_layer(net_conv, rois)
-    
-
-    fc7 = self.resnet.layer4(pool5).mean(3).mean(2) # average pooling after layer4
-
-    cls_prob, bbox_pred = self._region_classification(fc7)
-
-    for k in self._predictions.keys():
-      self._score_summaries[k]['value'] = self._predictions[k]
-
-    return rois, cls_prob, bbox_pred
 
   def load_pretrained_cnn(self, state_dict):
     self.resnet.load_state_dict(state_dict)
