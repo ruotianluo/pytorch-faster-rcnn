@@ -40,6 +40,7 @@ class Network(nn.Module):
     self._anchor_targets = {}
     self._proposal_targets = {}
     self._layers = {}
+    self._gt_image = None
     self._act_summaries = []
     self._score_summaries = {}
     self._train_summaries = {}
@@ -47,16 +48,20 @@ class Network(nn.Module):
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
 
-  def _add_gt_image_summary(self, image, gt_boxes, im_info):
+  def _add_gt_image(self):
     # add back mean
-    image += cfg.PIXEL_MEANS
+    image = self._image_gt_summaries['image']['placeholder'] + cfg.PIXEL_MEANS
     # BGR to RGB (opencv uses BGR)
-    image = tf.reverse(image, axis=[-1])
+    self._gt_image = tf.reverse(image, axis=[-1])
+
+  def _add_gt_image_summary(self):
     # use a customized visualization function to visualize the boxes
+    if self._gt_image is None:
+      self._add_gt_image()
     image = tf.py_func(draw_bounding_boxes, 
-                      [image, gt_boxes, im_info],
+                      [self._gt_image, self._image_gt_summaries['gt_boxes']['placeholder'], self._image_gt_summaries['im_info']['placeholder']],
                       tf.float32)
-    
+
     return tf.summary.image('GROUND_TRUTH', image)
 
   def _add_act_summary(self, tensor):
@@ -204,14 +209,12 @@ class Network(nn.Module):
     rpn_bbox_targets = self._anchor_targets['rpn_bbox_targets']
     rpn_bbox_inside_weights = self._anchor_targets['rpn_bbox_inside_weights']
     rpn_bbox_outside_weights = self._anchor_targets['rpn_bbox_outside_weights']
-
     rpn_loss_box = self._smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                           rpn_bbox_outside_weights, sigma=sigma_rpn, dim=[1, 2, 3])
 
     # RCNN, class loss
     cls_score = self._predictions["cls_score"]
     label = self._proposal_targets["labels"].view(-1)
-
     cross_entropy = F.cross_entropy(cls_score.view(-1, self._num_classes), label)
 
     # RCNN, bbox loss
@@ -219,7 +222,6 @@ class Network(nn.Module):
     bbox_targets = self._proposal_targets['bbox_targets']
     bbox_inside_weights = self._proposal_targets['bbox_inside_weights']
     bbox_outside_weights = self._proposal_targets['bbox_outside_weights']
-
     loss_box = self._smooth_l1_loss(bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights)
 
     self._losses['cross_entropy'] = cross_entropy
@@ -361,10 +363,7 @@ class Network(nn.Module):
 
     val_summaries = []
     with tf.device("/cpu:0"):
-      val_summaries.append(self._add_gt_image_summary(
-        self._image_gt_summaries['image']['placeholder'],
-        self._image_gt_summaries['gt_boxes']['placeholder'],
-        self._image_gt_summaries['im_info']['placeholder']))
+      val_summaries.append(self._add_gt_image_summary())
       for key, var in self._event_summaries.items():
         val_summaries.append(tf.summary.scalar(key, var['placeholder']))
       for key, var in self._score_summaries.items():

@@ -88,12 +88,30 @@ class SolverWrapper(object):
 
     return filename, nfilename
 
-  def train_model(self, sess, max_iters):
-    # Build data layers for both training and validation set
-    self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
-    self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
-    # Determine different scales for anchors, see paper
+  def from_snapshot(self, sfile, nfile):
+    print('Restoring model snapshots from {:s}'.format(sfile))
+    self.net.load_state_dict(torch.load(str(sfile)))
+    print('Restored.')
+    # Needs to restore the other hyper-parameters/states for training, (TODO xinlei) I have
+    # tried my best to find the random states so that it can be recovered exactly
+    # However the Tensorflow state is currently not available
+    with open(nfile, 'rb') as fid:
+      st0 = pickle.load(fid)
+      cur = pickle.load(fid)
+      perm = pickle.load(fid)
+      cur_val = pickle.load(fid)
+      perm_val = pickle.load(fid)
+      last_snapshot_iter = pickle.load(fid)
 
+      np.random.set_state(st0)
+      self.data_layer._cur = cur
+      self.data_layer._perm = perm
+      self.data_layer_val._cur = cur_val
+      self.data_layer_val._perm = perm_val
+
+    return last_snapshot_iter
+
+  def construct_graph(self):
     # Set the random seed
     torch.manual_seed(cfg.RNG_SEED)
     # Build the main computation graph
@@ -111,13 +129,14 @@ class SolverWrapper(object):
           params += [{'params':[value],'lr':lr*(cfg.TRAIN.DOUBLE_BIAS + 1), 'weight_decay': cfg.TRAIN.BIAS_DECAY and cfg.TRAIN.WEIGHT_DECAY or 0}]
         else:
           params += [{'params':[value],'lr':lr, 'weight_decay': cfg.TRAIN.WEIGHT_DECAY}]
-    momentum = cfg.TRAIN.MOMENTUM
-    self.optimizer = torch.optim.SGD(params, momentum=momentum)
+    self.optimizer = torch.optim.SGD(params, momentum=cfg.TRAIN.MOMENTUM)
     # Write the train and validation information to tensorboard
     self.writer = tf.summary.FileWriter(self.tbdir)
     self.valwriter = tf.summary.FileWriter(self.tbvaldir)
 
-    # Find previous snapshots if there is any to restore from
+    return lr, self.optimizer
+
+  def find_previous(self):
     sfiles = os.path.join(self.output_dir, cfg.TRAIN.SNAPSHOT_PREFIX + '_iter_*.pth')
     sfiles = glob.glob(sfiles)
     sfiles.sort(key=os.path.getmtime)
@@ -137,57 +156,78 @@ class SolverWrapper(object):
     lsf = len(sfiles)
     assert len(nfiles) == lsf
 
-    np_paths = nfiles
-    ss_paths = sfiles
+    return lsf, nfiles, sfiles
 
+  def initialize(self):
+    # Initial file lists are empty
+    np_paths = []
+    ss_paths = []
+    # Fresh train directly from ImageNet weights
+    print('Loading initial model weights from {:s}'.format(self.pretrained_model))
+    self.net.load_pretrained_cnn(torch.load(self.pretrained_model))
+    print('Loaded.')
+    # Need to fix the variables before loading, so that the RGB weights are changed to BGR
+    # For VGG16 it also changes the convolutional weights fc6 and fc7 to
+    # fully connected weights
+    last_snapshot_iter = 0
+    lr = cfg.TRAIN.LEARNING_RATE
+    stepsizes = list(cfg.TRAIN.STEPSIZE)
+
+    return lr, last_snapshot_iter, stepsizes, np_paths, ss_paths
+
+  def restore(self, sfile, nfile):
+    # Get the most recent snapshot and restore
+    np_paths = [nfile]
+    ss_paths = [sfile]
+    # Restore model from snapshots
+    last_snapshot_iter = self.from_snapshot(sfile, nfile)
+    # Set the learning rate
+    lr_scale = 1
+    stepsizes = []
+    for stepsize in cfg.TRAIN.STEPSIZE:
+      if last_snapshot_iter > stepsize:
+        lr_scale *= cfg.TRAIN.GAMMA
+      else:
+        stepsizes.append(stepsize)
+    scale_lr(self.optimizer, lr_scale)
+    lr = cfg.TRAIN.LEARNING_RATE * lr_scale
+    return lr, last_snapshot_iter, stepsizes, np_paths, ss_paths
+
+  def remove_snapshot(self, np_paths, ss_paths):
+    to_remove = len(np_paths) - cfg.TRAIN.SNAPSHOT_KEPT
+    for c in range(to_remove):
+      nfile = np_paths[0]
+      os.remove(str(nfile))
+      np_paths.remove(nfile)
+
+    to_remove = len(ss_paths) - cfg.TRAIN.SNAPSHOT_KEPT
+    for c in range(to_remove):
+      sfile = ss_paths[0]
+      # To make the code compatible to earlier versions of Tensorflow,
+      # where the naming tradition for checkpoints are different
+      os.remove(str(sfile))
+      ss_paths.remove(sfile)
+
+  def train_model(self, sess, max_iters):
+    # Build data layers for both training and validation set
+    self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
+    self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
+
+    # Construct the computation graph
+    lr, train_op = self.construct_graph()
+
+    # Find previous snapshots if there is any to restore from
+    lsf, nfiles, sfiles = self.find_previous()
+
+    # Initialize the variables or restore them from the last snapshot
     if lsf == 0:
-      # Fresh train directly from ImageNet weights
-      print('Loading initial model weights from {:s}'.format(self.pretrained_model))
-      self.net.load_pretrained_cnn(torch.load(self.pretrained_model))
-      print('Loaded.')
-      # Need to fix the variables before loading, so that the RGB weights are changed to BGR
-      # For VGG16 it also changes the convolutional weights fc6 and fc7 to
-      # fully connected weights
-      last_snapshot_iter = 0
-      stepsizes = list(cfg.TRAIN.STEPSIZE)
+      lr, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.initialize()
     else:
-      # Get the most recent snapshot and restore
-      ss_paths = [ss_paths[-1]]
-      np_paths = [np_paths[-1]]
-
-      print('Restoring model snapshots from {:s}'.format(sfiles[-1]))
-      self.net.load_state_dict(torch.load(str(sfiles[-1])))
-      print('Restored.')
-      # Needs to restore the other hyper-parameters/states for training, (TODO xinlei) I have
-      # tried my best to find the random states so that it can be recovered exactly
-      # However the Tensorflow state is currently not available
-      with open(str(nfiles[-1]), 'rb') as fid:
-        st0 = pickle.load(fid)
-        cur = pickle.load(fid)
-        perm = pickle.load(fid)
-        cur_val = pickle.load(fid)
-        perm_val = pickle.load(fid)
-        last_snapshot_iter = pickle.load(fid)
-
-        np.random.set_state(st0)
-        self.data_layer._cur = cur
-        self.data_layer._perm = perm
-        self.data_layer_val._cur = cur_val
-        self.data_layer_val._perm = perm_val
-
-      # Set the learning rate
-      lr_scale = 1
-      stepsizes = []
-      for stepsize in cfg.TRAIN.STEPSIZE:
-        if last_snapshot_iter > stepsize:
-          lr_scale *= cfg.TRAIN.GAMMA
-        else:
-          stepsizes.append(stepsize)
-      scale_lr(self.optimizer, lr_scale)
-      lr *= lr_scale
-
+      lr, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.restore(str(sfiles[-1]), 
+                                                                             str(nfiles[-1]))
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
+    # Make sure the lists are not empty
     stepsizes.append(max_iters)
     stepsizes.reverse()
     next_stepsize = stepsizes.pop()
@@ -235,28 +275,16 @@ class SolverWrapper(object):
         # for k in utils.timer.timer._average_time.keys():
         #   print(k, utils.timer.timer.average_time(k))
 
+      # Snapshotting
       if iter % cfg.TRAIN.SNAPSHOT_ITERS == 0:
         last_snapshot_iter = iter
-        snapshot_path, np_path = self.snapshot(iter)
+        ss_path, np_path = self.snapshot(iter)
         np_paths.append(np_path)
-        ss_paths.append(snapshot_path)
+        ss_paths.append(ss_path)
 
         # Remove the old snapshots if there are too many
         if len(np_paths) > cfg.TRAIN.SNAPSHOT_KEPT:
-          to_remove = len(np_paths) - cfg.TRAIN.SNAPSHOT_KEPT
-          for c in range(to_remove):
-            nfile = np_paths[0]
-            os.remove(str(nfile))
-            np_paths.remove(nfile)
-
-        if len(ss_paths) > cfg.TRAIN.SNAPSHOT_KEPT:
-          to_remove = len(ss_paths) - cfg.TRAIN.SNAPSHOT_KEPT
-          for c in range(to_remove):
-            sfile = ss_paths[0]
-            # To make the code compatible to earlier versions of Tensorflow,
-            # where the naming tradition for checkpoints are different
-            os.remove(str(sfile))
-            ss_paths.remove(sfile)
+          self.remove_snapshot(np_paths, ss_paths)
 
       iter += 1
 
