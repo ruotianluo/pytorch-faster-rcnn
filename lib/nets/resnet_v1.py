@@ -259,8 +259,7 @@ class resnetv1(Network):
       if classname.find('BatchNorm') != -1:
         for p in m.parameters(): p.requires_grad=False
 
-    if not cfg.TRAIN.BN_TRAIN:
-      self.resnet.apply(set_bn_fix)
+    self.resnet.apply(set_bn_fix)
 
     # Build resnet.
     self._layers['head'] = nn.Sequential(self.resnet.conv1, self.resnet.bn1,self.resnet.relu, 
@@ -297,8 +296,7 @@ class resnetv1(Network):
         if classname.find('BatchNorm') != -1:
           m.eval()
 
-      if not cfg.TRAIN.BN_TRAIN:
-        self.resnet.apply(set_bn_eval)
+      self.resnet.apply(set_bn_eval)
 
   def forward_prediction(self, mode):
     net_conv = self._layers['head'](self._image)

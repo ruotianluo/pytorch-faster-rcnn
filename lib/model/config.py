@@ -151,9 +151,6 @@ __C.TRAIN.RPN_POSITIVE_WEIGHT = -1.0
 # For COCO, setting USE_ALL_GT to False will exclude boxes that are flagged as ''iscrowd''
 __C.TRAIN.USE_ALL_GT = True
 
-# Whether to tune the batch normalization parameters during training
-__C.TRAIN.BN_TRAIN = False
-
 #
 # Testing options
 #

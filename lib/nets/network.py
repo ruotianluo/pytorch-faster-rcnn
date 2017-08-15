@@ -57,7 +57,7 @@ class Network(nn.Module):
                       [image, gt_boxes, im_info],
                       tf.float32)
     
-    return tf.summary.image('ground truth', image)
+    return tf.summary.image('GROUND_TRUTH', image)
 
   def _add_act_summary(self, tensor):
     tf.summary.histogram('ACT/' + tensor.op.name + '/activations', tensor)
