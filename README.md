@@ -70,14 +70,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   **Note**: You are welcome to contribute the settings on your end if you have made the code work properly on other GPUs.
 
 
-3. Build the Cython modules
-  ```Shell
-  make clean
-  make
-  cd ..
-  ```
-
-4. Build RoiPooling modeule
+3. Build RoiPooling module
   ```
   cd lib/layer_utils/roi_pooling/src/cuda
   echo "Compiling roi_pooling kernels by nvcc..."
@@ -85,6 +78,17 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   cd ../../
   python build.py
   cd ../../../
+  ```
+
+
+4. Build NMS
+  ```
+  cd lib/nms/src/cuda
+  echo "Compiling nms kernels by nvcc..."
+  nvcc -c -o nms_kernel.cu.o nms_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
+  cd ../../
+  python build.py
+  cd ../../
   ```
 
 5. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.

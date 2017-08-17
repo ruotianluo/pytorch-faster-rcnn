@@ -12,8 +12,9 @@ import os
 from model.config import cfg
 import numpy as np
 import numpy.random as npr
-from utils.cython_bbox import bbox_overlaps
+from utils.bbox import bbox_overlaps
 from model.bbox_transform import bbox_transform
+import torch
 
 def anchor_target_layer(rpn_cls_score, gt_boxes, im_info, _feat_stride, all_anchors, num_anchors):
   """Same as the anchor target layer in original Fast/er RCNN """
@@ -160,4 +161,4 @@ def _compute_targets(ex_rois, gt_rois):
   assert ex_rois.shape[1] == 4
   assert gt_rois.shape[1] == 5
 
-  return bbox_transform(ex_rois, gt_rois[:, :4]).astype(np.float32, copy=False)
+  return bbox_transform(torch.from_numpy(ex_rois), torch.from_numpy(gt_rois[:, :4])).numpy()

@@ -17,11 +17,13 @@ import os
 import math
 
 from utils.timer import Timer
-from utils.cython_nms import nms, nms_new
+from model.nms_wrapper import nms
 from utils.blob import im_list_to_blob
 
 from model.config import cfg, get_output_dir
 from model.bbox_transform import clip_boxes, bbox_transform_inv
+
+import torch
 
 def _get_image_blob(im):
   """Converts an image into a network input.
@@ -98,7 +100,7 @@ def im_detect(net, im):
   if cfg.TEST.BBOX_REG:
     # Apply bounding-box regression deltas
     box_deltas = bbox_pred
-    pred_boxes = bbox_transform_inv(boxes, box_deltas)
+    pred_boxes = bbox_transform_inv(torch.from_numpy(boxes), torch.from_numpy(box_deltas)).numpy()
     pred_boxes = _clip_boxes(pred_boxes, im.shape)
   else:
     # Simply repeat the boxes, once for each class
@@ -129,7 +131,7 @@ def apply_nms(all_boxes, thresh):
       if dets == []:
         continue
 
-      keep = nms(dets, thresh)
+      keep = nms(torch.from_numpy(dets), torch.from_numpy(thresh)).numpy()
       if len(keep) == 0:
         continue
       nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()
@@ -165,7 +167,7 @@ def test_net(net, imdb, weights_filename, max_per_image=100, thresh=0.05):
       cls_boxes = boxes[inds, j*4:(j+1)*4]
       cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
         .astype(np.float32, copy=False)
-      keep = nms(cls_dets, cfg.TEST.NMS)
+      keep = nms(torch.from_numpy(cls_dets), cfg.TEST.NMS).numpy() if cls_dets.size > 0 else []
       cls_dets = cls_dets[keep, :]
       all_boxes[j][i] = cls_dets
 

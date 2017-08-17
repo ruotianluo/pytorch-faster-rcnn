@@ -20,9 +20,12 @@ import utils.timer
 
 from layer_utils.snippets import generate_anchors_pre
 from layer_utils.proposal_layer import proposal_layer
+from layer_utils.proposal_layer_ import proposal_layer_
 from layer_utils.proposal_top_layer import proposal_top_layer
+from layer_utils.proposal_top_layer_ import proposal_top_layer_
 from layer_utils.anchor_target_layer import anchor_target_layer
 from layer_utils.proposal_target_layer import proposal_target_layer
+from layer_utils.proposal_target_layer_ import proposal_target_layer_
 from utils.visualization import draw_bounding_boxes
 
 from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
@@ -40,7 +43,6 @@ class Network(nn.Module):
     self._anchor_targets = {}
     self._proposal_targets = {}
     self._layers = {}
-    self._gt_image = None
     self._act_summaries = []
     self._score_summaries = {}
     self._train_summaries = {}
@@ -48,21 +50,17 @@ class Network(nn.Module):
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
 
-  def _add_gt_image(self):
+  def _add_gt_image_summary(self, image, gt_boxes, im_info):
     # add back mean
-    image = self._image_gt_summaries['image']['placeholder'] + cfg.PIXEL_MEANS
+    image += cfg.PIXEL_MEANS
     # BGR to RGB (opencv uses BGR)
-    self._gt_image = tf.reverse(image, axis=[-1])
-
-  def _add_gt_image_summary(self):
+    image = tf.reverse(image, axis=[-1])
     # use a customized visualization function to visualize the boxes
-    if self._gt_image is None:
-      self._add_gt_image()
     image = tf.py_func(draw_bounding_boxes, 
-                      [self._gt_image, self._image_gt_summaries['gt_boxes']['placeholder'], self._image_gt_summaries['im_info']['placeholder']],
+                      [image, gt_boxes, im_info],
                       tf.float32)
-
-    return tf.summary.image('GROUND_TRUTH', image)
+    
+    return tf.summary.image('ground truth', image)
 
   def _add_act_summary(self, tensor):
     tf.summary.histogram('ACT/' + tensor.op.name + '/activations', tensor)
@@ -77,15 +75,25 @@ class Network(nn.Module):
 
   def _proposal_top_layer(self, rpn_cls_prob, rpn_bbox_pred):
     rois, rpn_scores = proposal_top_layer(\
-                                    rpn_cls_prob, rpn_bbox_pred, self._im_info,
+                                    rpn_cls_prob.data.cpu().numpy(), rpn_bbox_pred.data.cpu().numpy(), self._im_info,
                                      self._feat_stride, self._anchors, self._num_anchors)
+    rois_, rpn_scores_ = proposal_top_layer_(\
+                                    rpn_cls_prob, rpn_bbox_pred, self._im_info,
+                                     self._feat_stride, torch.from_numpy(self._anchors), self._num_anchors)
     return rois, rpn_scores
 
   def _proposal_layer(self, rpn_cls_prob, rpn_bbox_pred):
     rois, rpn_scores = proposal_layer(\
+                                    rpn_cls_prob.data.cpu().numpy(), rpn_bbox_pred.data.cpu().numpy(), self._im_info, self._mode,
+                                     self._feat_stride, self._anchors, self._num_anchors)
+    rois_, rpn_scores_ = proposal_layer_(\
                                     rpn_cls_prob, rpn_bbox_pred, self._im_info, self._mode,
                                      self._feat_stride, self._anchors, self._num_anchors)
-
+    print((torch.Tensor(rois) - rois_.data.cpu()).max())
+    print((torch.Tensor(rpn_scores) - rpn_scores_.data.cpu()).max())
+    import utils.timer
+    rois = rois_.data.cpu().numpy()
+    rpn_scores = rpn_scores_.data.cpu().numpy()
     return rois, rpn_scores
 
   def _roi_pool_layer(self, bottom, rois):
@@ -104,7 +112,6 @@ class Network(nn.Module):
     [    0      -----    ---------------  ]
     [           H - 1         H - 1      ]
     """
-    rois = rois.detach()
 
     x1 = rois[:, 1::4] / 16.0
     y1 = rois[:, 2::4] / 16.0
@@ -115,7 +122,7 @@ class Network(nn.Module):
     width = bottom.size(3)
 
     # affine theta
-    zero = Variable(rois.data.new(rois.size(0), 1).zero_())
+    zero = rois.data.new(rois.size(0), 1).zero_()
     theta = torch.cat([\
       (x2 - x1) / (width - 1),
       zero,
@@ -138,7 +145,7 @@ class Network(nn.Module):
   def _anchor_target_layer(self, rpn_cls_score):
     rpn_labels, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights = \
       anchor_target_layer(
-      rpn_cls_score.data, self._gt_boxes.data.cpu().numpy(), self._im_info, self._feat_stride, self._anchors.data.cpu().numpy(), self._num_anchors)
+      rpn_cls_score.data.cpu().numpy(), self._gt_boxes, self._im_info, self._feat_stride, self._anchors, self._num_anchors)
 
     rpn_labels = Variable(torch.from_numpy(rpn_labels).float().cuda()) #.set_shape([1, 1, None, None])
     rpn_bbox_targets = Variable(torch.from_numpy(rpn_bbox_targets).float().cuda())#.set_shape([1, None, None, self._num_anchors * 4])
@@ -160,12 +167,14 @@ class Network(nn.Module):
     rois, roi_scores, labels, bbox_targets, bbox_inside_weights, bbox_outside_weights = \
       proposal_target_layer(
       rois, roi_scores, self._gt_boxes, self._num_classes)
-
-    self._proposal_targets['rois'] = rois
-    self._proposal_targets['labels'] = labels.long()
-    self._proposal_targets['bbox_targets'] = bbox_targets
-    self._proposal_targets['bbox_inside_weights'] = bbox_inside_weights
-    self._proposal_targets['bbox_outside_weights'] = bbox_outside_weights
+    rois_, roi_scores_, labels_, bbox_targets_, bbox_inside_weights_, bbox_outside_weights_ = \
+      proposal_target_layer_(
+      Variable(torch.from_numpy(rois)), Variable(torch.from_numpy(roi_scores)), Variable(torch.from_numpy(self._gt_boxes)), self._num_classes)
+    self._proposal_targets['rois'] = Variable(torch.from_numpy(rois).float().cuda())
+    self._proposal_targets['labels'] = Variable(torch.from_numpy(labels).long().cuda())
+    self._proposal_targets['bbox_targets'] = Variable(torch.from_numpy(bbox_targets).float().cuda())
+    self._proposal_targets['bbox_inside_weights'] = Variable(torch.from_numpy(bbox_inside_weights).float().cuda())
+    self._proposal_targets['bbox_outside_weights'] = Variable(torch.from_numpy(bbox_outside_weights).float().cuda())
 
     for k in self._proposal_targets.keys():
       self._score_summaries[k]['value'] = self._proposal_targets[k]
@@ -179,8 +188,11 @@ class Network(nn.Module):
     anchors, anchor_length = generate_anchors_pre(\
                                           height, width,
                                            self._feat_stride, self._anchor_scales, self._anchor_ratios)
-    self._anchors = Variable(torch.from_numpy(anchors).cuda())
+    self._anchors = anchors
     self._anchor_length = anchor_length
+
+  def _build_network(self):
+    raise NotImplementedError
 
   def _smooth_l1_loss(self, bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights, sigma=1.0, dim=[1]):
     sigma_2 = sigma ** 2
@@ -211,12 +223,14 @@ class Network(nn.Module):
     rpn_bbox_targets = self._anchor_targets['rpn_bbox_targets']
     rpn_bbox_inside_weights = self._anchor_targets['rpn_bbox_inside_weights']
     rpn_bbox_outside_weights = self._anchor_targets['rpn_bbox_outside_weights']
+
     rpn_loss_box = self._smooth_l1_loss(rpn_bbox_pred, rpn_bbox_targets, rpn_bbox_inside_weights,
                                           rpn_bbox_outside_weights, sigma=sigma_rpn, dim=[1, 2, 3])
 
     # RCNN, class loss
     cls_score = self._predictions["cls_score"]
     label = self._proposal_targets["labels"].view(-1)
+
     cross_entropy = F.cross_entropy(cls_score.view(-1, self._num_classes), label)
 
     # RCNN, bbox loss
@@ -224,6 +238,7 @@ class Network(nn.Module):
     bbox_targets = self._proposal_targets['bbox_targets']
     bbox_inside_weights = self._proposal_targets['bbox_inside_weights']
     bbox_outside_weights = self._proposal_targets['bbox_outside_weights']
+
     loss_box = self._smooth_l1_loss(bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights)
 
     self._losses['cross_entropy'] = cross_entropy
@@ -259,8 +274,9 @@ class Network(nn.Module):
     rpn_bbox_pred = rpn_bbox_pred.permute(0, 2, 3, 1).contiguous()  # batch * h * w * (num_anchors*4)
 
     if self._mode == 'TRAIN':
-      rois, roi_scores = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred) # rois, roi_scores are varible
+      rois, roi_scores = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred) # rois, roi_scores are numpy
       rpn_labels = self._anchor_target_layer(rpn_cls_score)
+      # rpn_labels = self._anchor_target_layer(rpn_cls_score.data)
       rois, _ = self._proposal_target_layer(rois, roi_scores)
     else:
       if cfg.TEST.MODE == 'nms':
@@ -269,6 +285,8 @@ class Network(nn.Module):
         rois, _ = self._proposal_top_layer(rpn_cls_prob, rpn_bbox_pred)
       else:
         raise NotImplementedError
+
+    rois = Variable(torch.from_numpy(rois).float().cuda())
 
     self._predictions["rpn_cls_score"] = rpn_cls_score
     self._predictions["rpn_cls_score_reshape"] = rpn_cls_score_reshape
@@ -292,12 +310,6 @@ class Network(nn.Module):
 
     return cls_prob, bbox_pred
 
-  def _image_to_head(self):
-    raise NotImplementedError
-
-  def _head_to_tail(self, pool5):
-    raise NotImplementedError
-
   def create_architecture(self, num_classes, tag=None,
                           anchor_scales=(8, 16, 32), anchor_ratios=(0.5, 1, 2)):
     self._tag = tag
@@ -314,7 +326,7 @@ class Network(nn.Module):
     assert tag != None
 
     # Initialize layers
-    self._init_modules()
+    self._build_network()
     self._init_summary_op()
 
   def _init_summary_op(self):
@@ -363,7 +375,10 @@ class Network(nn.Module):
 
     val_summaries = []
     with tf.device("/cpu:0"):
-      val_summaries.append(self._add_gt_image_summary())
+      val_summaries.append(self._add_gt_image_summary(
+        self._image_gt_summaries['image']['placeholder'],
+        self._image_gt_summaries['gt_boxes']['placeholder'],
+        self._image_gt_summaries['im_info']['placeholder']))
       for key, var in self._event_summaries.items():
         val_summaries.append(tf.summary.scalar(key, var['placeholder']))
       for key, var in self._score_summaries.items():
@@ -407,40 +422,18 @@ class Network(nn.Module):
     else:
       return sess.run(self._summary_op_val, feed_dict=feed_dict)
 
-  def _predict(self, mode):
-    # This is just _build_network in tf-faster-rcnn
-    net_conv = self._image_to_head()
-
-    # build the anchors for the image
-    self._anchor_component(net_conv.size(2), net_conv.size(3))
-   
-    rois = self._region_proposal(net_conv)
-    if cfg.POOLING_MODE == 'crop':
-      pool5 = self._crop_pool_layer(net_conv, rois)
-    else:
-      pool5 = self._roi_pool_layer(net_conv, rois)
-
-    fc7 = self._head_to_tail(pool5)
-
-    cls_prob, bbox_pred = self._region_classification(fc7)
-    
-    for k in self._predictions.keys():
-      self._score_summaries[k]['value'] = self._predictions[k]
-
-    return rois, cls_prob, bbox_pred
-
   def forward(self, image, im_info, gt_boxes=None, mode='TRAIN'):
     self._image_gt_summaries['image']['value'] = image
     self._image_gt_summaries['gt_boxes']['value'] = gt_boxes
     self._image_gt_summaries['im_info']['value'] = im_info
 
     self._image = Variable(torch.from_numpy(image.transpose([0,3,1,2])).cuda(), volatile=mode == 'TEST')
-    self._im_info = im_info # No need to change; actually it can be an list
-    self._gt_boxes = Variable(torch.from_numpy(gt_boxes).cuda()) if gt_boxes is not None else None
+    self._im_info = im_info # no nned to conver to variable
+    self._gt_boxes = gt_boxes # no need to convert to variable
 
     self._mode = mode
 
-    rois, cls_prob, bbox_pred = self._predict(mode)
+    rois, cls_prob, bbox_pred = self.forward_prediction(mode)
 
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
