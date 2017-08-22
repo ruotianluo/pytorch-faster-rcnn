@@ -131,7 +131,7 @@ def apply_nms(all_boxes, thresh):
       if dets == []:
         continue
 
-      keep = nms(torch.from_numpy(dets), torch.from_numpy(thresh)).numpy()
+      keep = nms(torch.from_numpy(dets), thresh).numpy()
       if len(keep) == 0:
         continue
       nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()

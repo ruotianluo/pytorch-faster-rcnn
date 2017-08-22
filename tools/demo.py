@@ -38,7 +38,7 @@ CLASSES = ('__background__',
            'motorbike', 'person', 'pottedplant',
            'sheep', 'sofa', 'train', 'tvmonitor')
 
-NETS = {'vgg16': ('vgg16_faster_rcnn_iter_70000.pth',),'res101': ('res101_faster_rcnn_iter_110000.pth',)}
+NETS = {'vgg16': ('vgg16_faster_rcnn_iter_%d.pth',),'res101': ('res101_faster_rcnn_iter_%d.pth',)}
 DATASETS= {'pascal_voc': ('voc_2007_trainval',),'pascal_voc_0712': ('voc_2007_trainval+voc_2012_trainval',)}
 
 def vis_detections(im, class_name, dets, thresh=0.5):
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     demonet = args.demo_net
     dataset = args.dataset
     saved_model = os.path.join('output', demonet, DATASETS[dataset][0], 'default',
-                              NETS[demonet][0])
+                              NETS[demonet][0] %(70000 if dataset == 'pascal_voc' else 110000))
 
 
     if not os.path.isfile(saved_model):
