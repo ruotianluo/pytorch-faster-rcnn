@@ -29,6 +29,8 @@ from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
 
 from model.config import cfg
 
+import tensorboard as tb
+
 class Network(nn.Module):
   def __init__(self, batch_size=1):
     nn.Module.__init__(self)
@@ -41,39 +43,36 @@ class Network(nn.Module):
     self._proposal_targets = {}
     self._layers = {}
     self._gt_image = None
-    self._act_summaries = []
+    self._act_summaries = {}
     self._score_summaries = {}
-    self._train_summaries = {}
     self._event_summaries = {}
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
 
   def _add_gt_image(self):
     # add back mean
-    image = self._image_gt_summaries['image']['placeholder'] + cfg.PIXEL_MEANS
+    image = self._image_gt_summaries['image'] + cfg.PIXEL_MEANS
     # BGR to RGB (opencv uses BGR)
-    self._gt_image = tf.reverse(image, axis=[-1])
+    self._gt_image = image[:,:,:,::-1].copy(order='C')
 
   def _add_gt_image_summary(self):
     # use a customized visualization function to visualize the boxes
-    if self._gt_image is None:
-      self._add_gt_image()
-    image = tf.py_func(draw_bounding_boxes, 
-                      [self._gt_image, self._image_gt_summaries['gt_boxes']['placeholder'], self._image_gt_summaries['im_info']['placeholder']],
-                      tf.float32)
+    self._add_gt_image()
+    image = draw_bounding_boxes(\
+                      self._gt_image, self._image_gt_summaries['gt_boxes'], self._image_gt_summaries['im_info'])
 
-    return tf.summary.image('GROUND_TRUTH', image)
+    return tb.summary.image('GROUND_TRUTH', torch.from_numpy(image[0].astype('float32')/ 255.0).permute(2,0,1))
 
-  def _add_act_summary(self, tensor):
-    tf.summary.histogram('ACT/' + tensor.op.name + '/activations', tensor)
-    tf.summary.scalar('ACT/' + tensor.op.name + '/zero_fraction',
-                      tf.nn.zero_fraction(tensor))
+  def _add_act_summary(self, key, tensor):
+    return tb.summary.histogram('ACT/' + key + '/activations', tensor.data.cpu().numpy(), bins='auto'),
+    tb.summary.scalar('ACT/' + key + '/zero_fraction',
+                      (tensor.data == 0).float().sum() / tensor.numel())
 
   def _add_score_summary(self, key, tensor):
-    tf.summary.histogram('SCORE/' + tensor.op.name + '/' + key + '/scores', tensor)
+    return tb.summary.histogram('SCORE/' + key + '/scores', tensor.data.cpu().numpy(), bins='auto')
 
-  def _add_train_summary(self, var):
-    tf.summary.histogram('TRAIN/' + var.op.name, var)
+  def _add_train_summary(self, key, var):
+    return tb.summary.histogram('TRAIN/' + key, var.data.cpu().numpy(), bins='auto')
 
   def _proposal_top_layer(self, rpn_cls_prob, rpn_bbox_pred):
     rois, rpn_scores = proposal_top_layer(\
@@ -152,7 +151,7 @@ class Network(nn.Module):
     self._anchor_targets['rpn_bbox_outside_weights'] = rpn_bbox_outside_weights
 
     for k in self._anchor_targets.keys():
-      self._score_summaries[k]['value'] = self._anchor_targets[k]
+      self._score_summaries[k] = self._anchor_targets[k]
 
     return rpn_labels
 
@@ -168,7 +167,7 @@ class Network(nn.Module):
     self._proposal_targets['bbox_outside_weights'] = bbox_outside_weights
 
     for k in self._proposal_targets.keys():
-      self._score_summaries[k]['value'] = self._proposal_targets[k]
+      self._score_summaries[k] = self._proposal_targets[k]
 
     return rois, roi_scores
 
@@ -235,13 +234,13 @@ class Network(nn.Module):
     self._losses['total_loss'] = loss
 
     for k in self._losses.keys():
-      self._event_summaries[k]['value'] = self._losses[k]
+      self._event_summaries[k] = self._losses[k]
 
     return loss
 
   def _region_proposal(self, net_conv):
     rpn = F.relu(self.rpn_net(net_conv))
-    self._act_summaries['rpn']['value'] = rpn
+    self._act_summaries['rpn'] = rpn
 
     rpn_cls_score = self.rpn_cls_score_net(rpn) # batch * (num_anchors * 2) * h * w
 
@@ -315,97 +314,35 @@ class Network(nn.Module):
 
     # Initialize layers
     self._init_modules()
-    self._init_summary_op()
 
-  def _init_summary_op(self):
-    """
-    Handle summaries Notes:
-    Here we still use original tensorflow tensorboard to do summary.
-    The way we send our result to summary, is we create placeholders for the values that needs summarized, and
-    created summary operators of these placeholders
-    Then during forwarding, we save the values.
-    To send it to the tensorboard, we run the summary operator by feeding the placeholders with 
-    the saved values and get the summary.
-
-    """
-
-    # Here we first create placeholders, and create summary operation.
-
-    # Manually add losses to event_summaries
-    for key in ['cross_entropy','loss_box','rpn_cross_entropy','rpn_loss_box','total_loss']:
-      self._event_summaries[key] = {'placeholder': tf.placeholder(tf.float32, shape=(), name=key)}
-
-    # Manually add losses to score_summaries
-    score_summaries_keys = []
-    # _anchor_targets
-    score_summaries_keys += ['rpn_labels','rpn_bbox_targets', 'rpn_bbox_inside_weights', 'rpn_bbox_outside_weights']
-    #_proposal_targets
-    score_summaries_keys += ['rois', 'labels', 'bbox_targets', 'bbox_inside_weights', 'bbox_outside_weights']
-    #_predictions
-    score_summaries_keys += ["rpn_cls_score", "rpn_cls_score_reshape", "rpn_cls_prob", "rpn_cls_pred", "rpn_bbox_pred", \
-                "cls_score", "cls_pred", "cls_prob", "bbox_pred", "rois"]
-    for key in score_summaries_keys:
-      self._score_summaries[key] = {'placeholder': tf.placeholder(tf.float32, name=key)}
-
-    # Manually add act_summaries
-    self._act_summaries = {'conv':{'placeholder': tf.placeholder(tf.float32, name='conv')}, 
-                            'rpn':{'placeholder': tf.placeholder(tf.float32, name='rpn')}}
-
-
-    self._image_gt_summaries = {'image':{'placeholder': tf.placeholder(tf.float32, shape=[self._batch_size, None, None, 3])},\
-                                'gt_boxes':{'placeholder': tf.placeholder(tf.float32, shape=[None, 5])},
-                                'im_info':{'placeholder': tf.placeholder(tf.float32, shape=[None, 3])}}
-
-    # Add train summaries
-    for k, var in dict(self.named_parameters()).items():
-      if var.requires_grad:
-        self._train_summaries[k] = {'placeholder': tf.placeholder(tf.float32, name=k)}
-
-    val_summaries = []
-    with tf.device("/cpu:0"):
-      val_summaries.append(self._add_gt_image_summary())
-      for key, var in self._event_summaries.items():
-        val_summaries.append(tf.summary.scalar(key, var['placeholder']))
-      for key, var in self._score_summaries.items():
-        self._add_score_summary(key, var['placeholder'])
-      for var in self._act_summaries.values():
-        self._add_act_summary(var['placeholder'])
-      for var in self._train_summaries.values():
-        self._add_train_summary(var['placeholder'])
-
-    self._summary_op = tf.summary.merge_all()
-    self._summary_op_val = tf.summary.merge(val_summaries)
-
-
-  def _run_summary_op(self, sess, val=False):
+  def _run_summary_op(self, val=False):
     """
     Run the summary operator: feed the placeholders with corresponding newtork outputs(activations)
     """
-    def delete_summaries_values(d):
-      # Delete the saved values to save memory, in case we have references of these computational graphs.
-      for _ in d.values(): del _['value']
-
-    feed_dict = {}
+    summaries = []
     # Add image gt
-    feed_dict.update({_['placeholder']:_['value'] for _ in self._image_gt_summaries.values()})
-    delete_summaries_values(self._image_gt_summaries)
+    summaries.append(self._add_gt_image_summary())
     # Add event_summaries
-    feed_dict.update({_['placeholder']:_['value'].data[0] for _ in self._event_summaries.values()})
-    delete_summaries_values(self._event_summaries)
+    for key, var in self._event_summaries.items():
+      summaries.append(tb.summary.scalar(key, var.data[0]))
+    self._event_summaries = {}
     if not val:
       # Add score summaries
-      feed_dict.update({_['placeholder']:_['value'].data.cpu().numpy() for _ in self._score_summaries.values()})
-      delete_summaries_values(self._score_summaries)
+      for key, var in self._score_summaries.items():
+        summaries.append(self._add_score_summary(key, var))
+      self._score_summaries = {}
       # Add act summaries
-      feed_dict.update({_['placeholder']:_['value'].data.cpu().numpy() for _ in self._act_summaries.values()})
-      delete_summaries_values(self._act_summaries)
+      for key, var in self._act_summaries.items():
+        summaries += self._add_act_summary(key, var)
+      self._act_summaries = {}
       # Add train summaries
       for k, var in dict(self.named_parameters()).items():
         if var.requires_grad:
-          feed_dict.update({self._train_summaries[k]['placeholder']: var.data.cpu().numpy()})
-      return sess.run(self._summary_op, feed_dict=feed_dict)
-    else:
-      return sess.run(self._summary_op_val, feed_dict=feed_dict)
+          summaries.append(self._add_train_summary(k, var))
+
+      self._image_gt_summaries = {}
+    
+    return summaries
 
   def _predict(self, mode):
     # This is just _build_network in tf-faster-rcnn
@@ -425,14 +362,14 @@ class Network(nn.Module):
     cls_prob, bbox_pred = self._region_classification(fc7)
     
     for k in self._predictions.keys():
-      self._score_summaries[k]['value'] = self._predictions[k]
+      self._score_summaries[k] = self._predictions[k]
 
     return rois, cls_prob, bbox_pred
 
   def forward(self, image, im_info, gt_boxes=None, mode='TRAIN'):
-    self._image_gt_summaries['image']['value'] = image
-    self._image_gt_summaries['gt_boxes']['value'] = gt_boxes
-    self._image_gt_summaries['im_info']['value'] = im_info
+    self._image_gt_summaries['image'] = image
+    self._image_gt_summaries['gt_boxes'] = gt_boxes
+    self._image_gt_summaries['im_info'] = im_info
 
     self._image = Variable(torch.from_numpy(image.transpose([0,3,1,2])).cuda(), volatile=mode == 'TEST')
     self._im_info = im_info # No need to change; actually it can be an list
@@ -489,11 +426,11 @@ class Network(nn.Module):
       for k in d.keys():
         del d[k]
 
-  def get_summary(self, sess, blobs):
+  def get_summary(self, blobs):
     self.eval()
     self.forward(blobs['data'], blobs['im_info'], blobs['gt_boxes'])
     self.train()
-    summary = self._run_summary_op(sess, True)
+    summary = self._run_summary_op(True)
 
     return summary
 
@@ -514,7 +451,7 @@ class Network(nn.Module):
 
     return rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss
 
-  def train_step_with_summary(self, sess, blobs, train_op):
+  def train_step_with_summary(self, blobs, train_op):
     self.forward(blobs['data'], blobs['im_info'], blobs['gt_boxes'])
     rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss = self._losses["rpn_cross_entropy"].data[0], \
                                                                         self._losses['rpn_loss_box'].data[0], \
@@ -524,7 +461,7 @@ class Network(nn.Module):
     train_op.zero_grad()
     self._losses['total_loss'].backward()
     train_op.step()
-    summary = self._run_summary_op(sess)
+    summary = self._run_summary_op()
 
     self.delete_intermediate_states()
 

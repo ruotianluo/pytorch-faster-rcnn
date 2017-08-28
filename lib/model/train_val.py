@@ -7,7 +7,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorboard as tb
 
 from model.config import cfg
 import roi_data_layer.roidb as rdl_roidb
@@ -131,8 +131,8 @@ class SolverWrapper(object):
           params += [{'params':[value],'lr':lr, 'weight_decay': cfg.TRAIN.WEIGHT_DECAY}]
     self.optimizer = torch.optim.SGD(params, momentum=cfg.TRAIN.MOMENTUM)
     # Write the train and validation information to tensorboard
-    self.writer = tf.summary.FileWriter(self.tbdir)
-    self.valwriter = tf.summary.FileWriter(self.tbvaldir)
+    self.writer = tb.writer.FileWriter(self.tbdir)
+    self.valwriter = tb.writer.FileWriter(self.tbvaldir)
 
     return lr, self.optimizer
 
@@ -208,7 +208,7 @@ class SolverWrapper(object):
       os.remove(str(sfile))
       ss_paths.remove(sfile)
 
-  def train_model(self, sess, max_iters):
+  def train_model(self, max_iters):
     # Build data layers for both training and validation set
     self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
     self.data_layer_val = RoIDataLayer(self.valroidb, self.imdb.num_classes, random=True)
@@ -252,12 +252,12 @@ class SolverWrapper(object):
       if now - last_summary_time > cfg.TRAIN.SUMMARY_INTERVAL:
         # Compute the graph with summary
         rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss, summary = \
-          self.net.train_step_with_summary(sess, blobs, self.optimizer)
-        self.writer.add_summary(summary, float(iter))
+          self.net.train_step_with_summary(blobs, self.optimizer)
+        for _sum in summary: self.writer.add_summary(_sum, float(iter))
         # Also check the summary on the validation set
         blobs_val = self.data_layer_val.forward()
-        summary_val = self.net.get_summary(sess, blobs_val)
-        self.valwriter.add_summary(summary_val, float(iter))
+        summary_val = self.net.get_summary(blobs_val)
+        for _sum in summary_val: self.valwriter.add_summary(_sum, float(iter))
         last_summary_time = now
       else:
         # Compute the graph without summary
@@ -340,10 +340,10 @@ def train_net(network, imdb, roidb, valroidb, output_dir, tb_dir,
   """Train a Faster R-CNN network."""
   roidb = filter_roidb(roidb)
   valroidb = filter_roidb(valroidb)
-  with tf.Session(config=tf.ConfigProto(device_count = {'GPU': 0})) as sess:
-    sw = SolverWrapper(network, imdb, roidb, valroidb, output_dir, tb_dir,
-                       pretrained_model=pretrained_model)
 
-    print('Solving...')
-    sw.train_model(sess, max_iters)
-    print('done solving')
+  sw = SolverWrapper(network, imdb, roidb, valroidb, output_dir, tb_dir,
+                     pretrained_model=pretrained_model)
+
+  print('Solving...')
+  sw.train_model(max_iters)
+  print('done solving')

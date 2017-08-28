@@ -47,7 +47,7 @@ class vgg16(Network):
 
   def _image_to_head(self):
     net_conv = self._layers['head'](self._image)
-    self._act_summaries['conv']['value'] = net_conv
+    self._act_summaries['conv'] = net_conv
     
     return net_conv
 
