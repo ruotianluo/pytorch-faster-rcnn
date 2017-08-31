@@ -7,8 +7,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-
 import math
 
 import torch
@@ -29,7 +27,7 @@ from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
 
 from model.config import cfg
 
-import tensorboard as tb
+import tensorboardX as tb
 
 class Network(nn.Module):
   def __init__(self, batch_size=1):
