@@ -294,16 +294,18 @@ class resnetv1(Network):
     # Override train so that the training mode is set as we want
     nn.Module.train(self, mode)
     if mode:
-      # Set fixed blocks to be in eval mode
+      # Set fixed blocks to be in eval mode (not really doing anything)
       self.resnet.eval()
-      self.resnet.layer1.train()
-      if cfg.RESNET.FIXED_BLOCKS >= 1:
-        self.resnet.layer2.train()
-      if cfg.RESNET.FIXED_BLOCKS >= 2:
-        self.resnet.layer3.train()
-      if cfg.RESNET.FIXED_BLOCKS >= 3:
+      if cfg.RESNET.FIXED_BLOCKS <= 3:
         self.resnet.layer4.train()
+      if cfg.RESNET.FIXED_BLOCKS <= 2:
+        self.resnet.layer3.train()
+      if cfg.RESNET.FIXED_BLOCKS <= 1:
+        self.resnet.layer2.train()
+      if cfg.RESNET.FIXED_BLOCKS == 0:
+        self.resnet.layer1.train()
 
+      # Set batchnorm always in eval mode during training
       def set_bn_eval(m):
         classname = m.__class__.__name__
         if classname.find('BatchNorm') != -1:
