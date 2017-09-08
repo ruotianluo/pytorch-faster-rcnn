@@ -118,8 +118,8 @@ class ResNet(nn.Module):
                  bias=False)
     self.bn1 = nn.BatchNorm2d(64)
     self.relu = nn.ReLU(inplace=True)
-    # Note that, tf-faster-rcnn use padding 1 maxpool instead of ceil_mode, but it doesn't affect the output much
-    self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=0, ceil_mode=True) # change
+    # maxpool different from pytorch-resnet, to match tf-faster-rcnn
+    self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
     self.layer1 = self._make_layer(block, 64, layers[0])
     self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
     self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
