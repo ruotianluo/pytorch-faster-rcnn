@@ -12,9 +12,9 @@ With VGG16 (``conv5_3``):
   - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k) **27.0** (**29.5** for tf-faster-rcnn). ((350k/490k) **24.6**(crop and resize) **21.8**(roi pooling)).
 
 With Resnet101 (last ``conv4``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **73.01**(crop and resize) **74.72**(roi pooling) (**75.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **77.67**(crop and resize) **78.87**(roi pooling) (**79.3** for tf-faster-rcnn).
-  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.3** （**34.1** for tf-faster-rcnn). ((350k/490k) **30.3**(crop and resize) **28.2**(roi pooling)).
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **73.72**(crop and resize) **75.07**(roi pooling) (**75.2** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.28**(crop and resize) **79.57**(roi pooling) (**79.3** for tf-faster-rcnn).
+  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.4** （**34.1** for tf-faster-rcnn). ((350k/490k) **30.3**(crop and resize) **28.2**(roi pooling)).
 
 More Results:
   - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**21.9**~~.
@@ -108,11 +108,11 @@ If you find it useful, the ``data/cache`` folder created on my side is also shar
 
 ### Demo and Test with pre-trained models
 1. Download pre-trained model (only google drive works)
-  ```Shell
+  <!-- ```Shell
   # Resnet101 for voc pre-trained on 07+12 set
   # ./data/scripts/fetch_faster_rcnn_models.sh
   ```
-  **Note**: if you cannot download the models through the link, or you want to try more models, you can check out the following solutions and optionally update the downloading script:
+  **Note**: if you cannot download the models through the link, or you want to try more models, you can check out the following solutions and optionally update the downloading script: -->
   - ~~Another server [here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/).~~
   - Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8).
 
