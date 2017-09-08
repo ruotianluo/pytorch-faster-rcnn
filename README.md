@@ -12,9 +12,9 @@ With VGG16 (``conv5_3``):
   - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k) **27.0** (**29.5** for tf-faster-rcnn). ((350k/490k) **24.6**(crop and resize) **21.8**(roi pooling)).
 
 With Resnet101 (last ``conv4``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **73.72**(crop and resize) **75.07**(roi pooling) (**75.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.28**(crop and resize) **79.57**(roi pooling) (**79.3** for tf-faster-rcnn).
-  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.4** （**34.1** for tf-faster-rcnn). ((350k/490k) **30.3**(crop and resize) **28.2**(roi pooling)).
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **75.08**(converted) (**75.2** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.85**(converted) (**79.3** for tf-faster-rcnn).
+  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.0**(converted) （**34.1** for tf-faster-rcnn).
 
 More Results:
   - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**21.9**~~.
@@ -107,14 +107,23 @@ Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgir
 If you find it useful, the ``data/cache`` folder created on my side is also shared [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/cache.tgz).
 
 ### Demo and Test with pre-trained models
-1. Download pre-trained model (only google drive works)
+~~1. Download pre-trained model (only google drive works)~~
   <!-- ```Shell
   # Resnet101 for voc pre-trained on 07+12 set
   # ./data/scripts/fetch_faster_rcnn_models.sh
   ```
   **Note**: if you cannot download the models through the link, or you want to try more models, you can check out the following solutions and optionally update the downloading script: -->
   - ~~Another server [here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/).~~
-  - Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8).
+  - ~~Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8).~~
+
+1. Convert from tf-faster-rcnn model (Only support res101 currently).
+You can download the pretrained model from [tf-faster-rcnn](https://github.com/endernewton/tf-faster-rcnn/#demo-and-test-with-pre-trained-models).
+Then run:
+```Shell
+python tools/convert_from_tensorflow.py --tensorflow_model model_name.ckpt
+```
+
+This script will create a `.pth` file with the same name in the same folder as the tensorflow model.
 
 2. Create a folder and a softlink to use the pre-trained model
   ```Shell
