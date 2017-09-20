@@ -342,7 +342,7 @@ class Network(nn.Module):
     
     return summaries
 
-  def _predict(self, mode):
+  def _predict(self):
     # This is just _build_network in tf-faster-rcnn
     net_conv = self._image_to_head()
 
@@ -375,7 +375,7 @@ class Network(nn.Module):
 
     self._mode = mode
 
-    rois, cls_prob, bbox_pred = self._predict(mode)
+    rois, cls_prob, bbox_pred = self._predict()
 
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
