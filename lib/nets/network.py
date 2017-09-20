@@ -421,7 +421,7 @@ class Network(nn.Module):
   def delete_intermediate_states(self):
     # Delete intermediate result to save memory
     for d in [self._losses, self._predictions, self._anchor_targets, self._proposal_targets]:
-      for k in d.keys():
+      for k in list(d):
         del d[k]
 
   def get_summary(self, blobs):

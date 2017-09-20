@@ -71,7 +71,7 @@ def draw_bounding_boxes(image, gt_boxes, im_info):
   except IOError:
     font = ImageFont.load_default()
 
-  for i in xrange(num_boxes):
+  for i in range(num_boxes):
     this_class = int(gt_boxes[i, 4])
     disp_image = draw_single_box(disp_image, 
                                 gt_boxes[i, 0],
