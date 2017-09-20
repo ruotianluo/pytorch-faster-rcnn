@@ -341,6 +341,7 @@ class Network(nn.Module):
 
   def _predict(self):
     # This is just _build_network in tf-faster-rcnn
+    torch.backends.cudnn.benchmark = False
     net_conv = self._image_to_head()
 
     # build the anchors for the image
@@ -352,6 +353,8 @@ class Network(nn.Module):
     else:
       pool5 = self._roi_pool_layer(net_conv, rois)
 
+    if self._mode == 'TRAIN':
+      torch.backends.cudnn.benchmark = True # benchmark because now the input size are fixed
     fc7 = self._head_to_tail(pool5)
 
     cls_prob, bbox_pred = self._region_classification(fc7)
