@@ -151,24 +151,6 @@ class ResNet(nn.Module):
 
     return nn.Sequential(*layers)
 
-  def forward(self, x):
-    x = self.conv1(x)
-    x = self.bn1(x)
-    x = self.relu(x)
-    x = self.maxpool(x)
-
-    x = self.layer1(x)
-    x = self.layer2(x)
-    x = self.layer3(x)
-    x = self.layer4(x)
-
-    x = self.avgpool(x)
-    x = x.view(x.size(0), -1)
-    x = self.fc(x)
-
-    return x
-
-
 def resnet18(pretrained=False):
   """Constructs a ResNet-18 model.
   Args:
@@ -314,4 +296,4 @@ class resnetv1(Network):
       self.resnet.apply(set_bn_eval)
 
   def load_pretrained_cnn(self, state_dict):
-    self.resnet.load_state_dict(state_dict)
+    self.resnet.load_state_dict({k: state_dict[k] for k in list(self.resnet.state_dict())})

@@ -59,7 +59,7 @@ class Network(nn.Module):
     image = draw_bounding_boxes(\
                       self._gt_image, self._image_gt_summaries['gt_boxes'], self._image_gt_summaries['im_info'])
 
-    return tb.summary.image('GROUND_TRUTH', torch.from_numpy(image[0].astype('float32')/ 255.0).permute(2,0,1))
+    return tb.summary.image('GROUND_TRUTH', image[0].astype('float32')/255.0)
 
   def _add_act_summary(self, key, tensor):
     return tb.summary.histogram('ACT/' + key + '/activations', tensor.data.cpu().numpy(), bins='auto'),
@@ -112,14 +112,11 @@ class Network(nn.Module):
     width = bottom.size(3)
 
     # affine theta
-    zero = Variable(rois.data.new(rois.size(0), 1).zero_())
-    theta = torch.cat([\
-      (x2 - x1) / (width - 1),
-      zero,
-      (x1 + x2 - width + 1) / (width - 1),
-      zero,
-      (y2 - y1) / (height - 1),
-      (y1 + y2 - height + 1) / (height - 1)], 1).view(-1, 2, 3)
+    theta = Variable(rois.data.new(rois.size(0), 2, 3).zero_())
+    theta[:, 0, 0] = (x2 - x1) / (width - 1)
+    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
+    theta[:, 1, 1] = (y2 - y1) / (height - 1)
+    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
 
     if max_pool:
       pre_pool_size = cfg.POOLING_SIZE * 2
@@ -342,8 +339,9 @@ class Network(nn.Module):
     
     return summaries
 
-  def _predict(self, mode):
+  def _predict(self):
     # This is just _build_network in tf-faster-rcnn
+    torch.backends.cudnn.benchmark = False
     net_conv = self._image_to_head()
 
     # build the anchors for the image
@@ -355,6 +353,8 @@ class Network(nn.Module):
     else:
       pool5 = self._roi_pool_layer(net_conv, rois)
 
+    if self._mode == 'TRAIN':
+      torch.backends.cudnn.benchmark = True # benchmark because now the input size are fixed
     fc7 = self._head_to_tail(pool5)
 
     cls_prob, bbox_pred = self._region_classification(fc7)
@@ -375,7 +375,7 @@ class Network(nn.Module):
 
     self._mode = mode
 
-    rois, cls_prob, bbox_pred = self._predict(mode)
+    rois, cls_prob, bbox_pred = self._predict()
 
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
@@ -421,7 +421,7 @@ class Network(nn.Module):
   def delete_intermediate_states(self):
     # Delete intermediate result to save memory
     for d in [self._losses, self._predictions, self._anchor_targets, self._proposal_targets]:
-      for k in d.keys():
+      for k in list(d):
         del d[k]
 
   def get_summary(self, blobs):
@@ -471,4 +471,12 @@ class Network(nn.Module):
     self._losses['total_loss'].backward()
     train_op.step()
     self.delete_intermediate_states()
+
+  def load_state_dict(self, state_dict):
+    """
+    Because we remove the definition of fc layer in resnet now, it will fail when loading 
+    the model trained before.
+    To provide back compatibility, we overwrite the load_state_dict
+    """
+    nn.Module.load_state_dict(self, {k: state_dict[k] for k in list(self.state_dict())})
 
