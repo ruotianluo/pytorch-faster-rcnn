@@ -112,14 +112,11 @@ class Network(nn.Module):
     width = bottom.size(3)
 
     # affine theta
-    zero = Variable(rois.data.new(rois.size(0), 1).zero_())
-    theta = torch.cat([\
-      (x2 - x1) / (width - 1),
-      zero,
-      (x1 + x2 - width + 1) / (width - 1),
-      zero,
-      (y2 - y1) / (height - 1),
-      (y1 + y2 - height + 1) / (height - 1)], 1).view(-1, 2, 3)
+    theta = Variable(rois.data.new(rois.size(0), 2, 3).zero_())
+    theta[:, 0, 0] = (x2 - x1) / (width - 1)
+    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
+    theta[:, 1, 1] = (y2 - y1) / (height - 1)
+    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
 
     if max_pool:
       pre_pool_size = cfg.POOLING_SIZE * 2
