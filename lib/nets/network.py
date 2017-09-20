@@ -472,3 +472,11 @@ class Network(nn.Module):
     train_op.step()
     self.delete_intermediate_states()
 
+  def load_state_dict(self, state_dict):
+    """
+    Because we remove the definition of fc layer in resnet now, it will fail when loading 
+    the model trained before.
+    To provide back compatibility, we overwrite the load_state_dict
+    """
+    nn.Module.load_state_dict(self, {k: state_dict[k] for k in list(self.state_dict())})
+

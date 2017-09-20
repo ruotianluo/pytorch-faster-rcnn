@@ -123,8 +123,6 @@ class ResNet(nn.Module):
     self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
     self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
     self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-    self.avgpool = nn.AvgPool2d(7)
-    self.fc = nn.Linear(512 * block.expansion, num_classes)
 
     for m in self.modules():
       if isinstance(m, nn.Conv2d):
@@ -150,24 +148,6 @@ class ResNet(nn.Module):
       layers.append(block(self.inplanes, planes))
 
     return nn.Sequential(*layers)
-
-  def forward(self, x):
-    x = self.conv1(x)
-    x = self.bn1(x)
-    x = self.relu(x)
-    x = self.maxpool(x)
-
-    x = self.layer1(x)
-    x = self.layer2(x)
-    x = self.layer3(x)
-    x = self.layer4(x)
-
-    x = self.avgpool(x)
-    x = x.view(x.size(0), -1)
-    x = self.fc(x)
-
-    return x
-
 
 def resnet18(pretrained=False):
   """Constructs a ResNet-18 model.
@@ -314,4 +294,4 @@ class resnetv1(Network):
       self.resnet.apply(set_bn_eval)
 
   def load_pretrained_cnn(self, state_dict):
-    self.resnet.load_state_dict(state_dict)
+    self.resnet.load_state_dict({k: state_dict[k] for k in list(self.resnet.state_dict())})
