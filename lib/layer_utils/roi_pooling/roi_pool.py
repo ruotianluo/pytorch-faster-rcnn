@@ -1,6 +1,6 @@
 import torch
 from torch.autograd import Function
-from _ext import roi_pooling
+from ._ext import roi_pooling
 
 
 class RoIPoolFunction(Function):
