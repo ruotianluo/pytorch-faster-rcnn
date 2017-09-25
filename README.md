@@ -1,3 +1,12 @@
+# Important notice:
+If you used the master branch before Sep. 26 2017 and its corresponding pretrained model, **PLEASE PAY ATTENTION**:
+The old master branch in now under old_master, you can still run the code and download the pretrained model, but the pretrained model for that old master is not compatible to the current master!
+
+The main differences between new and old master branch are in this two commits: [9d4c24e](https://github.com/ruotianluo/pytorch-faster-rcnn/commit/9d4c24e83c3e4ec33751e50d5e4d8b1dd793dfaa), [c899ce7](https://github.com/ruotianluo/pytorch-faster-rcnn/commit/c899ce70dae62e3db1a5805eda96df88e4b59ca6)
+The change is related to this [issue](https://github.com/ruotianluo/pytorch-faster-rcnn/issues/6); master now matches all the details (of resnet101) in [tf-faster-rcnn](https://github.com/endernewton/tf-faster-rcnn) so that we can now convert pretrained tf model to pytorch model (only resnet101 is supported).
+
+(vgg16 conversion is not among the top of my to-do list. May reach it some day.)
+
 # pytorch-faster-rcnn
 A pytorch implementation of faster RCNN detection framework based on Xinlei Chen's [tf-faster-rcnn](https://github.com/endernewton/tf-faster-rcnn). Xinlei Chen's repository is based on the python Caffe implementation of faster RCNN available [here](https://github.com/rbgirshick/py-faster-rcnn).
 
@@ -12,9 +21,9 @@ With VGG16 (``conv5_3``):
   - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k) **27.0** (**29.5** for tf-faster-rcnn). ((350k/490k) **24.6**(crop and resize) **21.8**(roi pooling)).
 
 With Resnet101 (last ``conv4``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **75.08**(converted) (**75.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.85**(converted) (**79.3** for tf-faster-rcnn).
-  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.0**(converted) （**34.1** for tf-faster-rcnn).
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **74.84**(from scratch) **75.08**(converted) (**75.2** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.82**(from scratch) **78.85**(converted) (**79.3** for tf-faster-rcnn).
+  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.8**(from scratch) **34.0**(converted) （**34.1** for tf-faster-rcnn).
 
 More Results:
   - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**21.9**~~.
@@ -107,17 +116,18 @@ Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgir
 If you find it useful, the ``data/cache`` folder created on my side is also shared [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/cache.tgz).
 
 ### Demo and Test with pre-trained models
-~~1. Download pre-trained model (only google drive works)~~
+1. Download pre-trained model (only google drive works)
   <!-- ```Shell
   # Resnet101 for voc pre-trained on 07+12 set
   # ./data/scripts/fetch_faster_rcnn_models.sh
   ```
   **Note**: if you cannot download the models through the link, or you want to try more models, you can check out the following solutions and optionally update the downloading script: -->
   - ~~Another server [here](http://gs11655.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/).~~
-  - ~~Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtWERtcnZOanZGSG8).~~
+  - Google drive [here](https://drive.google.com/open?id=0B7fNdx_jAqhtNE10TDZDbFRuU0E).
 
-1. Convert from tf-faster-rcnn model (Only support res101 currently).
-You can download the pretrained model from [tf-faster-rcnn](https://github.com/endernewton/tf-faster-rcnn/#demo-and-test-with-pre-trained-models).
+**(Optional)**
+Instead of downloading my pretrained or converted model, you can also convert from tf-faster-rcnn model (Only support res101 currently).
+You can download the tensorflow pretrained model from [tf-faster-rcnn](https://github.com/endernewton/tf-faster-rcnn/#demo-and-test-with-pre-trained-models).
 Then run:
 ```Shell
 python tools/convert_from_tensorflow.py --tensorflow_model model_name.ckpt
