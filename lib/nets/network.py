@@ -29,12 +29,11 @@ from model.config import cfg
 
 import tensorboardX as tb
 
+from scipy.misc import imresize
+
 class Network(nn.Module):
-  def __init__(self, batch_size=1):
+  def __init__(self):
     nn.Module.__init__(self)
-    self._feat_stride = [16, ]
-    self._feat_compress = [1. / 16., ]
-    self._batch_size = batch_size
     self._predictions = {}
     self._losses = {}
     self._anchor_targets = {}
@@ -50,8 +49,9 @@ class Network(nn.Module):
   def _add_gt_image(self):
     # add back mean
     image = self._image_gt_summaries['image'] + cfg.PIXEL_MEANS
+    resized = imresize(image, self._im_info[:2] / self._im_info[2])
     # BGR to RGB (opencv uses BGR)
-    self._gt_image = image[:,:,:,::-1].copy(order='C')
+    self._gt_image = image[:,:,::-1].copy(order='C')
 
   def _add_gt_image_summary(self):
     # use a customized visualization function to visualize the boxes

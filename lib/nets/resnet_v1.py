@@ -206,8 +206,10 @@ def resnet152(pretrained=False):
   return model
 
 class resnetv1(Network):
-  def __init__(self, batch_size=1, num_layers=50):
-    Network.__init__(self, batch_size=batch_size)
+  def __init__(self, num_layers=50):
+    Network.__init__(self)
+    self._feat_stride = [16, ]
+    self._feat_compress = [1. / float(self._feat_stride[0]), ]
     self._num_layers = num_layers
 
   def _crop_pool_layer(self, bottom, rois):

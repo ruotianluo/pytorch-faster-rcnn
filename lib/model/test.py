@@ -90,7 +90,7 @@ def im_detect(net, im):
   assert len(im_scales) == 1, "Only single-image batch implemented"
 
   im_blob = blobs['data']
-  blobs['im_info'] = np.array([[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32)
+  blobs['im_info'] = np.array([im_blob.shape[1], im_blob.shape[2], im_scales[0]], dtype=np.float32)
 
   _, scores, bbox_pred, rois = net.test_image(blobs['data'], blobs['im_info'])
   
