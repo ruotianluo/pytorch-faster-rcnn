@@ -25,7 +25,7 @@ __C.TRAIN.LEARNING_RATE = 0.001
 __C.TRAIN.MOMENTUM = 0.9
 
 # Weight decay, for regularization
-__C.TRAIN.WEIGHT_DECAY = 0.0005
+__C.TRAIN.WEIGHT_DECAY = 0.0001
 
 # Factor for reducing the learning rate
 __C.TRAIN.GAMMA = 0.1
@@ -232,7 +232,7 @@ __C.MOBILENET = edict()
 # Whether to regularize the depth-wise filters during training
 __C.MOBILENET.REGU_DEPTH = False
 
-# Number of fixed layers during training, by default the first of all 14 layers is fixed
+# Number of fixed layers during training, by default the bottom 5 of 14 layers is fixed
 # Range: 0 (none) to 12 (all)
 __C.MOBILENET.FIXED_LAYERS = 5
 

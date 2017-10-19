@@ -8,6 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+from six.moves import range
 import PIL.Image as Image
 import PIL.ImageColor as ImageColor
 import PIL.ImageDraw as ImageDraw
@@ -39,7 +40,14 @@ STANDARD_COLORS = [
     'WhiteSmoke', 'Yellow', 'YellowGreen'
 ]
 
-def draw_single_box(image, xmin, ymin, xmax, ymax, display_str, font, color='black', thickness=4):
+NUM_COLORS = len(STANDARD_COLORS)
+
+try:
+  FONT = ImageFont.truetype('arial.ttf', 24)
+except IOError:
+  FONT = ImageFont.load_default()
+
+def _draw_single_box(image, xmin, ymin, xmax, ymax, display_str, font, color='black', thickness=4):
   draw = ImageDraw.Draw(image)
   (left, right, top, bottom) = (xmin, xmax, ymin, ymax)
   draw.line([(left, top), (left, bottom), (right, bottom),
@@ -62,14 +70,9 @@ def draw_single_box(image, xmin, ymin, xmax, ymax, display_str, font, color='bla
 
 def draw_bounding_boxes(image, gt_boxes, im_info):
   num_boxes = gt_boxes.shape[0]
-  num_colors = len(STANDARD_COLORS)
-  im_info = im_info[0]
+  gt_boxes_new = gt_boxes.copy()
+  gt_boxes_new[:,:4] = np.round(gt_boxes_new[:,:4].copy() / im_info[2])
   disp_image = Image.fromarray(np.uint8(image[0]))
-
-  try:
-    font = ImageFont.truetype('arial.ttf', 24)
-  except IOError:
-    font = ImageFont.load_default()
 
   for i in range(num_boxes):
     this_class = int(gt_boxes[i, 4])
