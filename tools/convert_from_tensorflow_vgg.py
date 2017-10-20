@@ -18,11 +18,11 @@ var_dict = {k:reader.get_tensor(k) for k in var_to_shape_map.keys()}
 
 del var_dict['Variable']
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     if 'Momentum' in k:
         del var_dict[k]
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     if k.find('/') >= 0:
         var_dict['vgg' + k[k.find('/'):]] = var_dict[k]
         del var_dict[k]
@@ -38,7 +38,7 @@ dummy_replace = OrderedDict([
                 ('/', '.')])
 
 for a, b in dummy_replace.items():
-    for k in var_dict.keys():
+    for k in list(var_dict.keys()):
         if a in k:
             var_dict[k.replace(a,b)] = var_dict[k]
             del var_dict[k]
@@ -61,7 +61,7 @@ layer_map = OrderedDict([
     ('fc7', 'classifier.3')])
 
 for a, b in layer_map.items():
-    for k in var_dict.keys():
+    for k in list(var_dict.keys()):
         if a in k:
             var_dict[k.replace(a,b)] = var_dict[k]
             del var_dict[k]
