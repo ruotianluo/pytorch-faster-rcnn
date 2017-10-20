@@ -61,14 +61,14 @@ for k in list(var_dict.keys()):
         var_dict[k.replace(m.group(0), str(int(m.group(1)) - 1))] = var_dict[k]
         del var_dict[k]
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     if var_dict[k].ndim == 4:
         var_dict[k] = var_dict[k].transpose((3, 2, 0, 1)).copy(order='C')
     if var_dict[k].ndim == 2:
         var_dict[k] = var_dict[k].transpose((1, 0)).copy(order='C')
     # assert x[k].shape == var_dict[k].shape, k
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     var_dict[k] = torch.from_numpy(var_dict[k])
 
 

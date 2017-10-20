@@ -66,7 +66,7 @@ for a, b in layer_map.items():
             var_dict[k.replace(a,b)] = var_dict[k]
             del var_dict[k]
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     if 'classifier.0' in k:
         if var_dict[k].ndim == 2: # weight
             var_dict[k] = var_dict[k].reshape(7,7,512,4096).transpose((3, 2, 0, 1)).reshape(4096, -1).copy(order='C')
@@ -77,7 +77,7 @@ for k in var_dict.keys():
             var_dict[k] = var_dict[k].transpose((1, 0)).copy(order='C')
     # assert x[k].shape == var_dict[k].shape, k
 
-for k in var_dict.keys():
+for k in list(var_dict.keys()):
     var_dict[k] = torch.from_numpy(var_dict[k])
 
 torch.save(var_dict, args.tensorflow_model[:args.tensorflow_model.find('.ckpt')]+'.pth')
