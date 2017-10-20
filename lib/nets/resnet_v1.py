@@ -211,6 +211,8 @@ class resnetv1(Network):
     self._feat_stride = [16, ]
     self._feat_compress = [1. / float(self._feat_stride[0]), ]
     self._num_layers = num_layers
+    self._net_conv_channels = 1024
+    self._fc7_channels = 2048
 
   def _crop_pool_layer(self, bottom, rois):
     return Network._crop_pool_layer(self, bottom, rois, cfg.RESNET.MAX_POOL)
@@ -225,7 +227,7 @@ class resnetv1(Network):
     fc7 = self.resnet.layer4(pool5).mean(3).mean(2) # average pooling after layer4
     return fc7
 
-  def _init_modules(self):
+  def _init_head_tail(self):
     # choose different blocks for different number of layers
     if self._num_layers == 50:
       self.resnet = resnet50()
@@ -261,18 +263,6 @@ class resnetv1(Network):
     # Build resnet.
     self._layers['head'] = nn.Sequential(self.resnet.conv1, self.resnet.bn1,self.resnet.relu, 
       self.resnet.maxpool,self.resnet.layer1,self.resnet.layer2,self.resnet.layer3)
-
-    # rpn
-    self.rpn_net = nn.Conv2d(1024, 512, [3, 3], padding=1)
-
-    self.rpn_cls_score_net = nn.Conv2d(512, self._num_anchors * 2, [1, 1])
-    
-    self.rpn_bbox_pred_net = nn.Conv2d(512, self._num_anchors * 4, [1, 1])
-
-    self.cls_score_net = nn.Linear(2048, self._num_classes)
-    self.bbox_pred_net = nn.Linear(2048, self._num_classes * 4)
-
-    self.init_weights()
 
   def train(self, mode=True):
     # Override train so that the training mode is set as we want

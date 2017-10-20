@@ -310,6 +310,21 @@ class Network(nn.Module):
     # Initialize layers
     self._init_modules()
 
+  def _init_modules(self):
+    self._init_head_tail()
+
+    # rpn
+    self.rpn_net = nn.Conv2d(self._net_conv_channels, cfg.RPN_CHANNELS, [3, 3], padding=1)
+
+    self.rpn_cls_score_net = nn.Conv2d(cfg.RPN_CHANNELS, self._num_anchors * 2, [1, 1])
+    
+    self.rpn_bbox_pred_net = nn.Conv2d(cfg.RPN_CHANNELS, self._num_anchors * 4, [1, 1])
+
+    self.cls_score_net = nn.Linear(self._fc7_channels, self._num_classes)
+    self.bbox_pred_net = nn.Linear(self._fc7_channels, self._num_classes * 4)
+
+    self.init_weights()
+
   def _run_summary_op(self, val=False):
     """
     Run the summary operator: feed the placeholders with corresponding newtork outputs(activations)

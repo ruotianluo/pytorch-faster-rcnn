@@ -22,8 +22,10 @@ class vgg16(Network):
     Network.__init__(self)
     self._feat_stride = [16, ]
     self._feat_compress = [1. / float(self._feat_stride[0]), ]
+    self._net_conv_channels = 512
+    self._fc7_channels = 4096
 
-  def _init_modules(self):
+  def _init_head_tail(self):
     self.vgg = models.vgg16()
     # Remove fc8
     self.vgg.classifier = nn.Sequential(*list(self.vgg.classifier._modules.values())[:-1])
@@ -34,18 +36,6 @@ class vgg16(Network):
 
     # not using the last maxpool layer
     self._layers['head'] = nn.Sequential(*list(self.vgg.features._modules.values())[:-1])
-
-    # rpn
-    self.rpn_net = nn.Conv2d(512, 512, [3, 3], padding=1)
-
-    self.rpn_cls_score_net = nn.Conv2d(512, self._num_anchors * 2, [1, 1])
-    
-    self.rpn_bbox_pred_net = nn.Conv2d(512, self._num_anchors * 4, [1, 1])
-
-    self.cls_score_net = nn.Linear(4096, self._num_classes)
-    self.bbox_pred_net = nn.Linear(4096, self._num_classes * 4)
-
-    self.init_weights()
 
   def _image_to_head(self):
     net_conv = self._layers['head'](self._image)
