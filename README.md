@@ -65,12 +65,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   git clone https://github.com/ruotianluo/pytorch-faster-rcnn.git
   ```
 
-2. Update your -arch in setup script to match your GPU
-  ```Shell
-  cd pytorch-faster-rcnn/lib
-  # Change the GPU architecture (-arch) if necessary
-  vim setup.py
-  ```
+2. Choose your `-arch` option to match your GPU for step 3 and 4.
 
   | GPU model  | Architecture |
   | ------------- | ------------- |
