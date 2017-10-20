@@ -75,16 +75,15 @@ def draw_bounding_boxes(image, gt_boxes, im_info):
   disp_image = Image.fromarray(np.uint8(image[0]))
 
   for i in range(num_boxes):
-    this_class = int(gt_boxes[i, 4])
-    disp_image = draw_single_box(disp_image, 
-                                gt_boxes[i, 0],
-                                gt_boxes[i, 1],
-                                gt_boxes[i, 2],
-                                gt_boxes[i, 3],
-                                'N%d-C%d' % (i, this_class),
-                                font,
-                                color=STANDARD_COLORS[this_class % num_colors])
+    this_class = int(gt_boxes_new[i, 4])
+    disp_image = _draw_single_box(disp_image, 
+                                gt_boxes_new[i, 0],
+                                gt_boxes_new[i, 1],
+                                gt_boxes_new[i, 2],
+                                gt_boxes_new[i, 3],
+                                'N%02d-C%02d' % (i, this_class),
+                                FONT,
+                                color=STANDARD_COLORS[this_class % NUM_COLORS])
 
   image[0, :] = np.array(disp_image)
   return image
-
