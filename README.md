@@ -11,35 +11,39 @@ A pytorch implementation of faster RCNN detection framework based on Xinlei Chen
 **Note**: Several minor modifications are made when reimplementing the framework, which give potential improvements. For details about the modifications and ablative analysis, please refer to the technical report [An Implementation of Faster RCNN with Study for Region Sampling](https://arxiv.org/pdf/1702.02138.pdf). If you are seeking to reproduce the results in the original paper, please use the [official code](https://github.com/ShaoqingRen/faster_rcnn) or maybe the [semi-official code](https://github.com/rbgirshick/py-faster-rcnn). For details about the faster RCNN architecture please refer to the paper [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks](http://arxiv.org/pdf/1506.01497.pdf).
 
 ### Detection Performance
-The current code supports **VGG16**, **Resnet V1** and ~~**Mobilenet V1**~~ models. We mainly tested it on plain VGG16 and Resnet101 architecture. As the baseline, we report numbers using a single model on a single convolution layer, so no multi-scale, no multi-stage bounding box regression, no skip-connection, no extra input is used. The only data augmentation technique is left-right flipping during training following the original Faster RCNN. All models are released.
+The current code supports **VGG16**, **Resnet V1** and **Mobilenet V1** models. We mainly tested it on plain VGG16 and Resnet101 architecture. As the baseline, we report numbers using a single model on a single convolution layer, so no multi-scale, no multi-stage bounding box regression, no skip-connection, no extra input is used. The only data augmentation technique is left-right flipping during training following the original Faster RCNN. All models are released.
 
 With VGG16 (``conv5_3``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **70.48**(from scratch) **70.90**(converted) (**71.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test ([R-FCN](https://github.com/daijifeng001/R-FCN) schedule), **74.83**(from scratch) **75.07**(converted) (**75.3** for tf-faster-rcnn).
-  - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k) **27.0**(from scratch) **29.0**(converted) (**29.5** for tf-faster-rcnn).
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **71.22**(from scratch) **70.75**(converted) (**70.8** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test ([R-FCN](https://github.com/daijifeng001/R-FCN) schedule), **75.33**(from scratch) **75.27**(converted) (**75.7** for tf-faster-rcnn).
+  - Train on COCO 2014 [trainval35k](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) and test on [minival](https://github.com/rbgirshick/py-faster-rcnn/tree/master/models) (900k/1190k) **29.2**(from scratch) **30.1**(converted) (**30.2** for tf-faster-rcnn).
 
 With Resnet101 (last ``conv4``):
-  - Train on VOC 2007 trainval and test on VOC 2007 test, **74.84**(from scratch) **75.08**(converted) (**75.2** for tf-faster-rcnn).
-  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **78.82**(from scratch) **78.85**(converted) (**79.3** for tf-faster-rcnn).
-  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **34.8**(from scratch) **34.0**(converted) （**34.1** for tf-faster-rcnn).
+  - Train on VOC 2007 trainval and test on VOC 2007 test, **75.29**(from scratch) **75.76**(converted) (**75.7** for tf-faster-rcnn).
+  - Train on VOC 2007+2012 trainval and test on VOC 2007 test (R-FCN schedule), **79.26**(from scratch) **79.78**(converted) (**79.8** for tf-faster-rcnn).
+  - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **35.1**(from scratch) **35.4**(converted) （**35.4** for tf-faster-rcnn).
 
 More Results:
-  - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**21.9**~~.
-  - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), **31.4**(converted) (**31.6** for tf-faster-rcnn).
-  - Train Resnet152 on COCO 2014 trainval35k and test on minival (900k/1190k), **34.9**(converted) (**35.2** for tf-faster-rcnn).
+  - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), **21.9**(converted) （**21.8** for tf-faster-rcnn).
+  - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), **32.4**(converted) (**32.4** for tf-faster-rcnn).
+  - Train Resnet152 on COCO 2014 trainval35k and test on minival (900k/1190k), **36.7**(converted) (**36.1** for tf-faster-rcnn).
 
-Approximate *baseline* [setup](https://github.com/endernewton/tf-faster-rcnn/blob/master/experiments/cfgs/res101-lg.yml) from [FPN](https://arxiv.org/abs/1612.03144) (this repo does not contain training code for FPN yet):
-  - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**33.4**~~.
-  - Train Resnet101 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**36.3**~~.
-  - Train Resnet152 on COCO 2014 trainval35k and test on minival (1000k/1390k), ~~**37.2**~~.
+Approximate *baseline* [setup](https://github.com/endernewton/tf-faster-rcnn/blob/master/experiments/cfgs/res101-lg.yml) from [FPN](https://arxiv.org/abs/1612.03144) (this repository does not contain training code for FPN yet):
+  - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**34.2**~~.
+  - Train Resnet101 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**37.4**~~.
+  - Train Resnet152 on COCO 2014 trainval35k and test on minival (900k/1190k), ~~**38.2**~~.
 
 **Note**:
-  - Due to the randomness in GPU training with Tensorflow especially for VOC, the best numbers are reported (with 2-3 attempts) here. According to my experience, for COCO you can almost always get a very close number (within ~0.2%) despite the randomness.
-  - The numbers are obtained with the **default** testing scheme which selects region proposals using non-maximal suppression (TEST.MODE nms), the alternative testing scheme (TEST.MODE all) will likely result in slightly better performance (see [report](https://arxiv.org/pdf/1702.02138.pdf), for COCO it boosts 0.X AP).
+  - Due to the randomness in GPU training especially for VOC, the best numbers are reported (with 2-3 attempts) here. According to my experience, for COCO you can almost always get a very close number (within ~0.2%) despite the randomness.
+  - The numbers are obtained with the **default** testing scheme which selects region proposals using non-maximal suppression (TEST.MODE nms), the alternative testing scheme (TEST.MODE nms) will likely result in slightly better performance (see [report](https://arxiv.org/pdf/1702.02138.pdf), for COCO it boosts 0.X AP).
   - Since we keep the small proposals (\< 16 pixels width/height), our performance is especially good for small objects.
-  - For other minor modifications, please check the [report](https://arxiv.org/pdf/1702.02138.pdf). Notable ones include ~~using ``crop_and_resize``~~, and excluding ground truth boxes in RoIs during training.
-  - For COCO, we find the performance improving with more iterations (VGG16 350k/490k: 26.9, 600k/790k: 28.3, 900k/1190k: 29.5) (number from tf-faster-rcnn), and potentially better performance can be achieved with even more iterations.
-  - For Resnets, we fix the first block (total 4) when fine-tuning the network, and only use ``crop_and_resize`` to resize the RoIs (7x7) without max-pool (which Xinlei find useless especially for COCO). The final feature maps are average-pooled for classification and regression. All batch normalization parameters are fixed. Weight decay is set to Renset101 default 1e-4. Learning rate for biases is not doubled.
+  - We do not set a threshold (instead of 0.05) for a detection to be included in the final result, which increases recall.
+  - Weight decay is set to 1e-4.
+  - For other minor modifications, please check the [report](https://arxiv.org/pdf/1702.02138.pdf). Notable ones include using ``crop_and_resize``, and excluding ground truth boxes in RoIs during training.
+  - For COCO, we find the performance improving with more iterations, and potentially better performance can be achieved with even more iterations.
+  - For Resnets, we fix the first block (total 4) when fine-tuning the network, and only use ``crop_and_resize`` to resize the RoIs (7x7) without max-pool (which I find useless especially for COCO). The final feature maps are average-pooled for classification and regression. All batch normalization parameters are fixed. Learning rate for biases is not doubled.
+  - For Mobilenets, we fix the first five layers when fine-tuning the network. All batch normalization parameters are fixed. Weight decay for Mobilenet layers is set to 4e-5.
+
   - For approximate [FPN](https://arxiv.org/abs/1612.03144) baseline setup we simply resize the image with 800 pixels, add 32^2 anchors, and take 1000 proposals during testing.
   - Check out [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/)/[here](http://xinlei.sp.cs.cmu.edu/xinleic/tf-faster-rcnn/)/[here](https://drive.google.com/open?id=0B1_fAEgxdnvJSmF3YUlZcHFqWTQ) for the latest models, including longer COCO VGG16 models and Resnet ones.
   
@@ -49,9 +53,9 @@ Displayed Ground Truth on Tensorboard |  Displayed Predictions on Tensorboard
 
 ### Additional features
 Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.02138.pdf) are added to make research life easier:
-  - **Support for train-and-validation**. During training, the validation data will also be tested from time to time to monitor the process and check potential overfitting. Ideally training and validation should be separate, where the model is loaded everytime to test on validation. However I have implemented it in a joint way to save time and GPU memory. Though in the default setup the testing data is used for validation, no special attempts is made to overfit on testing set.
-  - **Support for resuming training**. I tried to store as much information as possible when snapshoting, with the purpose to resume training from the lateset snapshot properly. The meta information includes current image index, permutation of images, and random state of numpy. However, when you resume training the random seed for tensorflow will be reset (not sure how to save the random state of tensorflow now), so it will result in a difference. **Note** that, the current implementation still cannot force the model to behave deterministically even with the random seeds set. Suggestion/solution is welcome and much appreciated.
-  - **Support for visualization**. The current implementation will summarize ground truth detections, statistics of losses, activations and variables during training, and dump it to a separate folder for tensorboard visualization. The computing graph is also saved for debugging.
+  - **Support for train-and-validation**. During training, the validation data will also be tested from time to time to monitor the process and check potential overfitting. Ideally training and validation should be separate, where the model is loaded every time to test on validation. However I have implemented it in a joint way to save time and GPU memory. Though in the default setup the testing data is used for validation, no special attempts is made to overfit on testing set.
+  - **Support for resuming training**. I tried to store as much information as possible when snapshoting, with the purpose to resume training from the latest snapshot properly. The meta information includes current image index, permutation of images, and random state of numpy. However, when you resume training the random seed for tensorflow will be reset (not sure how to save the random state of tensorflow now), so it will result in a difference. **Note** that, the current implementation still cannot force the model to behave deterministically even with the random seeds set. Suggestion/solution is welcome and much appreciated.
+  - **Support for visualization**. The current implementation will summarize ground truth boxes, statistics of losses, activations and variables during training, and dump it to a separate folder for tensorboard visualization. The computing graph is also saved for debugging.
 
 ### Prerequisites
   - A basic pytorch installation. The code follows **0.2**. If you are using old **0.1.12**, you can checkout 0.1.12 branch.
@@ -109,7 +113,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   ```
 
 ### Setup data
-Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgirshick/py-faster-rcnn#beyond-the-demo-installation-for-training-and-testing-models) to setup VOC and COCO datasets (Part of COCO is done). The steps involve downloading data and optionally creating softlinks in the ``data`` folder. Since faster RCNN does not rely on pre-computed proposals, it is safe to ignore the steps that setup proposals.
+Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgirshick/py-faster-rcnn#beyond-the-demo-installation-for-training-and-testing-models) to setup VOC and COCO datasets (Part of COCO is done). The steps involve downloading data and optionally creating soft links in the ``data`` folder. Since faster RCNN does not rely on pre-computed proposals, it is safe to ignore the steps that setup proposals.
 
 If you find it useful, the ``data/cache`` folder created on my side is also shared [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/cache.tgz).
 
@@ -134,7 +138,7 @@ python tools/convert_from_tensorflow_vgg.py --tensorflow_model vgg_model.ckpt
 
 This script will create a `.pth` file with the same name in the same folder as the tensorflow model.
 
-2. Create a folder and a softlink to use the pre-trained model
+2. Create a folder and a soft link to use the pre-trained model
   ```Shell
   NET=res101
   TRAIN_IMDB=voc_2007_trainval+voc_2012_trainval
@@ -146,7 +150,7 @@ This script will create a `.pth` file with the same name in the same folder as t
 
 3. Demo for testing on custom images
   ```Shell
-  # at reposistory root
+  # at repository root
   GPU_ID=0
   CUDA_VISIBLE_DEVICES=${GPU_ID} ./tools/demo.py
   ```
@@ -157,7 +161,7 @@ This script will create a `.pth` file with the same name in the same folder as t
   GPU_ID=0
   ./experiments/scripts/test_faster_rcnn.sh $GPU_ID pascal_voc_0712 res101
   ```
-  **Note**: If you cannot get the reported numbers (78.7 on my side), then probabaly the NMS function is compiled improperly, refer to [Issue 5](https://github.com/endernewton/tf-faster-rcnn/issues/5).
+  **Note**: If you cannot get the reported numbers (79.8 on my side), then probably the NMS function is compiled improperly, refer to [Issue 5](https://github.com/endernewton/tf-faster-rcnn/issues/5).
 
 ### Train your own model
 1. Download pre-trained models and weights. The current code support VGG16 and Resnet V1 models. Pre-trained models are provided by [pytorch-vgg](https://github.com/jcjohnson/pytorch-vgg.git) and [pytorch-resnet](https://github.com/ruotianluo/pytorch-resnet) (the ones with caffe in the name), you can download the pre-trained models and set them in the ``data/imagenet_weights`` folder. For example for VGG16 model, you can set up like:
@@ -206,7 +210,7 @@ This script will create a `.pth` file with the same name in the same folder as t
   ./experiments/scripts/train_faster_rcnn.sh 0 pascal_voc vgg16
   ./experiments/scripts/train_faster_rcnn.sh 1 coco res101
   ```
-  **Note**: Please double check you have deleted softlink to the pre-trained models before training. If you find NaNs during training, please refer to [Issue 86](https://github.com/endernewton/tf-faster-rcnn/issues/86).
+  **Note**: Please double check you have deleted soft link to the pre-trained models before training. If you find NaNs during training, please refer to [Issue 86](https://github.com/endernewton/tf-faster-rcnn/issues/86). Also if you want to have multi-gpu support, check out [Issue 121](https://github.com/endernewton/tf-faster-rcnn/issues/121).
 
 3. Visualization with Tensorboard
   ```Shell
