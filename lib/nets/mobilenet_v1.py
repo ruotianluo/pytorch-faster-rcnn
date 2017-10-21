@@ -7,46 +7,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
-import tensorflow.contrib.slim as slim
-from tensorflow.contrib.slim import losses
-from tensorflow.contrib.slim import arg_scope
-from tensorflow.contrib.slim.python.slim.nets import resnet_utils
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+
 import numpy as np
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 
 from nets.network import Network
 from model.config import cfg
-
-def separable_conv2d_same(inputs, kernel_size, stride, rate=1, scope=None):
-  """Strided 2-D separable convolution with 'SAME' padding.
-  Args:
-    inputs: A 4-D tensor of size [batch, height_in, width_in, channels].
-    kernel_size: An int with the kernel_size of the filters.
-    stride: An integer, the output stride.
-    rate: An integer, rate for atrous convolution.
-    scope: Scope.
-  Returns:
-    output: A 4-D tensor of size [batch, height_out, width_out, channels] with
-      the convolution output.
-  """
-
-  # By passing filters=None
-  # separable_conv2d produces only a depth-wise convolution layer
-  if stride == 1:
-    return slim.separable_conv2d(inputs, None, kernel_size, 
-                                  depth_multiplier=1, stride=1, rate=rate,
-                                  padding='SAME', scope=scope)
-  else:
-    kernel_size_effective = kernel_size + (kernel_size - 1) * (rate - 1)
-    pad_total = kernel_size_effective - 1
-    pad_beg = pad_total // 2
-    pad_end = pad_total - pad_beg
-    inputs = tf.pad(inputs,
-                    [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
-    return slim.separable_conv2d(inputs, None, kernel_size, 
-                                  depth_multiplier=1, stride=stride, rate=rate, 
-                                  padding='VALID', scope=scope)
 
 # The following is adapted from:
 # https://github.com/tensorflow/models/blob/master/slim/nets/mobilenet_v1.py
@@ -78,47 +48,83 @@ _CONV_DEFS = [
     DepthSepConv(kernel=3, stride=1, depth=1024)
 ]
 
-# Modified mobilenet_v1
-def mobilenet_v1_base(inputs,
-                      conv_defs,
-                      starting_layer=0,
+def mobilenet_v1_base(final_endpoint='Conv2d_13_pointwise',
                       min_depth=8,
                       depth_multiplier=1.0,
-                      output_stride=None,
-                      reuse=None,
-                      scope=None):
-  """Mobilenet v1.
-  Constructs a Mobilenet v1 network from inputs to the given final endpoint.
-  Args:
-    inputs: a tensor of shape [batch_size, height, width, channels].
-    starting_layer: specifies the current starting layer. For region proposal 
-      network it is 0, for region classification it is 12 by default.
-    min_depth: Minimum depth value (number of channels) for all convolution ops.
-      Enforced when depth_multiplier < 1, and not an active constraint when
-      depth_multiplier >= 1.
-    depth_multiplier: Float multiplier for the depth (number of channels)
-      for all convolution ops. The value must be greater than zero. Typical
-      usage will be to set this value in (0, 1) to reduce the number of
-      parameters or computation cost of the model.
-    conv_defs: A list of ConvDef named tuples specifying the net architecture.
-    output_stride: An integer that specifies the requested ratio of input to
-      output spatial resolution. If not None, then we invoke atrous convolution
-      if necessary to prevent the network from reducing the spatial resolution
-      of the activation maps. 
-    scope: Optional variable_scope.
-  Returns:
-    tensor_out: output tensor corresponding to the final_endpoint.
-  Raises:
-    ValueError: if depth_multiplier <= 0, or convolution type is not defined.
-  """
-  depth = lambda d: max(int(d * depth_multiplier), min_depth)
-  end_points = {}
+                      conv_defs=None,
+                      output_stride=None):
+    """Mobilenet v1.
 
-  # Used to find thinned depths for each layer.
-  if depth_multiplier <= 0:
-    raise ValueError('depth_multiplier is not greater than zero.')
+    Constructs a Mobilenet v1 network from inputs to the given final endpoint.
 
-  with tf.variable_scope(scope, 'MobilenetV1', [inputs], reuse=reuse):
+    Args:
+        inputs: a tensor of shape [batch_size, height, width, channels].
+        final_endpoint: specifies the endpoint to construct the network up to. It
+            can be one of ['Conv2d_0', 'Conv2d_1_pointwise', 'Conv2d_2_pointwise',
+            'Conv2d_3_pointwise', 'Conv2d_4_pointwise', 'Conv2d_5_pointwise',
+            'Conv2d_6_pointwise', 'Conv2d_7_pointwise', 'Conv2d_8_pointwise',
+            'Conv2d_9_pointwise', 'Conv2d_10_pointwise', 'Conv2d_11_pointwise',
+            'Conv2d_12_pointwise', 'Conv2d_13_pointwise'].
+        min_depth: Minimum depth value (number of channels) for all convolution ops.
+            Enforced when depth_multiplier < 1, and not an active constraint when
+            depth_multiplier >= 1.
+        depth_multiplier: Float multiplier for the depth (number of channels)
+            for all convolution ops. The value must be greater than zero. Typical
+            usage will be to set this value in (0, 1) to reduce the number of
+            parameters or computation cost of the model.
+        conv_defs: A list of ConvDef namedtuples specifying the net architecture.
+        output_stride: An integer that specifies the requested ratio of input to
+            output spatial resolution. If not None, then we invoke atrous convolution
+            if necessary to prevent the network from reducing the spatial resolution
+            of the activation maps. Allowed values are 8 (accurate fully convolutional
+            mode), 16 (fast fully convolutional mode), 32 (classification mode).
+        scope: Optional variable_scope.
+
+    Returns:
+        tensor_out: output tensor corresponding to the final_endpoint.
+        end_points: a set of activations for external use, for example summaries or
+                                losses.
+
+    Raises:
+        ValueError: if final_endpoint is not set to one of the predefined values,
+                                or depth_multiplier <= 0, or the target output_stride is not
+                                allowed.
+    """
+    depth = lambda d: max(int(d * depth_multiplier), min_depth)
+    end_points = OrderedDict()
+
+    # Used to find thinned depths for each layer.
+    if depth_multiplier <= 0:
+        raise ValueError('depth_multiplier is not greater than zero.')
+
+    if conv_defs is None:
+        conv_defs = _CONV_DEFS
+
+    if output_stride is not None and output_stride not in [8, 16, 32]:
+        raise ValueError('Only allowed output_stride values are 8, 16, 32.')
+
+    def conv_bn(in_channels, out_channels, kernel_size=3, stride=1):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, (kernel_size - 1) // 2, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU6(inplace=True)
+        )
+
+    def conv_dw(in_channels, kernel_size=3, stride=1, dilation=1):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size, stride, (kernel_size - 1) // 2,\
+                      groups=in_channels, dilation=dilation, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU6(inplace=True)
+        )
+
+    def conv_pw(in_channels, out_channels, kernel_size=3, stride=1, dilation=1):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, 0, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU6(inplace=True),
+        )
+
     # The current_stride variable keeps track of the output stride of the
     # activations, i.e., the running product of convolution strides up to the
     # current network layer. This allows us to invoke atrous convolution
@@ -129,79 +135,42 @@ def mobilenet_v1_base(inputs,
     # The atrous convolution rate parameter.
     rate = 1
 
-    net = inputs
+    in_channels = 3
     for i, conv_def in enumerate(conv_defs):
-      end_point_base = 'Conv2d_%d' % (i + starting_layer)
+        end_point_base = 'Conv2d_%d' % i
 
-      if output_stride is not None and current_stride == output_stride:
-        # If we have reached the target output_stride, then we need to employ
-        # atrous convolution with stride=1 and multiply the atrous rate by the
-        # current unit's stride for use in subsequent layers.
-        layer_stride = 1
-        layer_rate = rate
-        rate *= conv_def.stride
-      else:
-        layer_stride = conv_def.stride
-        layer_rate = 1
-        current_stride *= conv_def.stride
+        if output_stride is not None and current_stride == output_stride:
+            # If we have reached the target output_stride, then we need to employ
+            # atrous convolution with stride=1 and multiply the atrous rate by the
+            # current unit's stride for use in subsequent layers.
+            layer_stride = 1
+            layer_rate = rate
+            rate *= conv_def.stride
+        else:
+            layer_stride = conv_def.stride
+            layer_rate = 1
+            current_stride *= conv_def.stride
 
-      if isinstance(conv_def, Conv):
-        end_point = end_point_base
-        net = resnet_utils.conv2d_same(net, depth(conv_def.depth), conv_def.kernel,
-                          stride=conv_def.stride,
-                          scope=end_point)
+        out_channels = depth(conv_def.depth)
+        if isinstance(conv_def, Conv):
+            end_point = end_point_base
+            end_points[end_point] = conv_bn(in_channels, out_channels, conv_def.kernel,
+                                            stride=conv_def.stride)
+            if end_point == final_endpoint:
+                return nn.Sequential(end_points)
 
-      elif isinstance(conv_def, DepthSepConv):
-        end_point = end_point_base + '_depthwise'
-        
-        net = separable_conv2d_same(net, conv_def.kernel,
-                                    stride=layer_stride,
-                                    rate=layer_rate,
-                                    scope=end_point)
+        elif isinstance(conv_def, DepthSepConv):
+            end_points[end_point_base] = nn.Sequential(OrderedDict([
+                ('depthwise', conv_dw(in_channels, conv_def.kernel, stride=layer_stride, dilation=layer_rate)),
+                ('pointwise', conv_pw(in_channels, out_channels, 1, stride=1))]))
 
-        end_point = end_point_base + '_pointwise'
-
-        net = slim.conv2d(net, depth(conv_def.depth), [1, 1],
-                          stride=1,
-                          scope=end_point)
-
-      else:
-        raise ValueError('Unknown convolution type %s for layer %d'
-                         % (conv_def.ltype, i))
-
-    return net
-
-# Modified arg_scope to incorporate configs
-def mobilenet_v1_arg_scope(is_training=True,
-                           stddev=0.09):
-  batch_norm_params = {
-      'is_training': False,
-      'center': True,
-      'scale': True,
-      'decay': 0.9997,
-      'epsilon': 0.001,
-      'trainable': False,
-  }
-
-  # Set weight_decay for weights in Conv and DepthSepConv layers.
-  weights_init = tf.truncated_normal_initializer(stddev=stddev)
-  regularizer = tf.contrib.layers.l2_regularizer(cfg.MOBILENET.WEIGHT_DECAY)
-  if cfg.MOBILENET.REGU_DEPTH:
-    depthwise_regularizer = regularizer
-  else:
-    depthwise_regularizer = None
-
-  with slim.arg_scope([slim.conv2d, slim.separable_conv2d],
-                      trainable=is_training,
-                      weights_initializer=weights_init,
-                      activation_fn=tf.nn.relu6, 
-                      normalizer_fn=slim.batch_norm,
-                      padding='SAME'):
-    with slim.arg_scope([slim.batch_norm], **batch_norm_params):
-      with slim.arg_scope([slim.conv2d], weights_regularizer=regularizer):
-        with slim.arg_scope([slim.separable_conv2d],
-                            weights_regularizer=depthwise_regularizer) as sc:
-          return sc
+            if end_point_base + '_pointwise' == final_endpoint:
+                return nn.Sequential(end_points)
+        else:
+            raise ValueError('Unknown convolution type %s for layer %d'
+                                                % (conv_def.ltype, i))
+        in_channels = out_channels
+    raise ValueError('Unknown final endpoint %s' % final_endpoint)
 
 class mobilenetv1(Network):
   def __init__(self):
@@ -209,70 +178,73 @@ class mobilenetv1(Network):
     self._feat_stride = [16, ]
     self._feat_compress = [1. / float(self._feat_stride[0]), ]
     self._depth_multiplier = cfg.MOBILENET.DEPTH_MULTIPLIER
-    self._scope = 'MobilenetV1'
+    self._net_conv_channels = 512
+    self._fc7_channels = 1024
 
-  def _image_to_head(self, is_training, reuse=None):
-    # Base bottleneck
-    assert (0 <= cfg.MOBILENET.FIXED_LAYERS <= 12)
-    net_conv = self._image
-    if cfg.MOBILENET.FIXED_LAYERS > 0:
-      with slim.arg_scope(mobilenet_v1_arg_scope(is_training=False)):
-        net_conv = mobilenet_v1_base(net_conv,
-                                      _CONV_DEFS[:cfg.MOBILENET.FIXED_LAYERS],
-                                      starting_layer=0,
-                                      depth_multiplier=self._depth_multiplier,
-                                      reuse=reuse,
-                                      scope=self._scope)
-    if cfg.MOBILENET.FIXED_LAYERS < 12:
-      with slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
-        net_conv = mobilenet_v1_base(net_conv,
-                                      _CONV_DEFS[cfg.MOBILENET.FIXED_LAYERS:12],
-                                      starting_layer=cfg.MOBILENET.FIXED_LAYERS,
-                                      depth_multiplier=self._depth_multiplier,
-                                      reuse=reuse,
-                                      scope=self._scope)
+  def init_weights(self):
+    def normal_init(m, mean, stddev, truncated=False):
+      """
+      weight initalizer: truncated normal and random normal.
+      """
+      if m.__class__.__name__.find('Conv') == -1:
+        return
+      if truncated:
+        m.weight.data.normal_().fmod_(2).mul_(stddev).add_(mean) # not a perfect approximation
+      else:
+        m.weight.data.normal_(mean, stddev)
+      if m.bias is not None: m.bias.data.zero_()
+      
+    self.mobilenet.apply(lambda m: normal_init(m, 0, 0.09, True))
+    normal_init(self.rpn_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
+    normal_init(self.rpn_cls_score_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
+    normal_init(self.rpn_bbox_pred_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
+    normal_init(self.cls_score_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
+    normal_init(self.bbox_pred_net, 0, 0.001,  cfg.TRAIN.TRUNCATED)
 
-    self._act_summaries.append(net_conv)
-    self._layers['head'] = net_conv
+  def _image_to_head(self):
+    net_conv = self._layers['head'](self._image)
+    self._act_summaries['conv'] = net_conv
 
     return net_conv
 
-  def _head_to_tail(self, pool5, is_training, reuse=None):
-    with slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
-      fc7 = mobilenet_v1_base(pool5,
-                              _CONV_DEFS[12:],
-                              starting_layer=12,
-                              depth_multiplier=self._depth_multiplier,
-                              reuse=reuse,
-                              scope=self._scope)
-      # average pooling done by reduce_mean
-      fc7 = tf.reduce_mean(fc7, axis=[1, 2])
+  def _head_to_tail(self, pool5):
+    fc7 = self._layers['tail'](pool5)
+    fc7 = fc7.mean(3).mean(2)
     return fc7
 
-  def get_variables_to_restore(self, variables, var_keep_dic):
-    variables_to_restore = []
+  def _init_head_tail(self):
+    self.mobilenet = mobilenet_v1_base()
 
-    for v in variables:
-      # exclude the first conv layer to swap RGB to BGR
-      if v.name == (self._scope + '/Conv2d_0/weights:0'):
-        self._variables_to_fix[v.name] = v
-        continue
-      if v.name.split(':')[0] in var_keep_dic:
-        print('Variables restored: %s' % v.name)
-        variables_to_restore.append(v)
+    # Fix blocks  
+    assert (0 <= cfg.MOBILENET.FIXED_LAYERS <= 12)
+    for m in list(self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
+      for p in m.parameters():
+        p.requires_grad = False
+    
+    def set_bn_fix(m):
+      classname = m.__class__.__name__
+      if classname.find('BatchNorm') != -1:
+        for p in m.parameters(): p.requires_grad=False
 
-    return variables_to_restore
+    self.mobilenet.apply(set_bn_fix)
 
-  def fix_variables(self, sess, pretrained_model):
-    print('Fix MobileNet V1 layers..')
-    with tf.variable_scope('Fix_MobileNet_V1') as scope:
-      with tf.device("/cpu:0"):
-        # fix RGB to BGR, and match the scale by (255.0 / 2.0)
-        Conv2d_0_rgb = tf.get_variable("Conv2d_0_rgb", 
-                                    [3, 3, 3, max(int(32 * self._depth_multiplier), 8)], 
-                                    trainable=False)
-        restorer_fc = tf.train.Saver({self._scope + "/Conv2d_0/weights": Conv2d_0_rgb})
-        restorer_fc.restore(sess, pretrained_model)
+    # Add weight decay
+    def l2_regularizer(m, wd):
+      if m.__class__.__name__.find('Conv') != -1:
+        m.weight.weight_decay = cfg.MOBILENET.WEIGHT_DECAY
+    if cfg.MOBILENET.REGU_DEPTH:
+      self.mobilenet.apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY))
+    else:
+      self.mobilenet.apply(lambda x: l2_regularizer(x, 0))
+      # always set the first conv layer
+      list(self.mobilenet.children())[0].apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY))
 
-        sess.run(tf.assign(self._variables_to_fix[self._scope + "/Conv2d_0/weights:0"], 
-                           tf.reverse(Conv2d_0_rgb / (255.0 / 2.0), [2])))
+    # Build mobilenet.
+    self._layers['head'] = nn.Sequential(*list(self.mobilenet.children())[:12])
+    self._layers['tail'] = nn.Sequential(*list(self.mobilenet.children())[12:])
+
+  def load_pretrained_cnn(self, state_dict):
+    # TODO
+    print('Warning: No available pretrained model yet')
+    return
+    self.mobilenet.load_state_dict({k: state_dict[k] for k in list(self.resnet.state_dict())})
