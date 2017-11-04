@@ -84,7 +84,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
 
 3. Build RoiPooling module
   ```
-  cd lib/layer_utils/roi_pooling/src/cuda
+  cd pytorch-faster-rcnn/lib/layer_utils/roi_pooling/src/cuda
   echo "Compiling roi_pooling kernels by nvcc..."
   nvcc -c -o roi_pooling_kernel.cu.o roi_pooling_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
   cd ../../
