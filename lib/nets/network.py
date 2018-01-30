@@ -119,15 +119,13 @@ class Network(nn.Module):
     theta[:, 1, 1] = (y2 - y1) / (height - 1)
     theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
 
+    pre_pool_size = cfg.POOLING_SIZE * 2 if max_pool else cfg.POOLING_SIZE
+    grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
+    torch.backends.cudnn.enabled = False
+    crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
+    torch.backends.cudnn.enabled = True
     if max_pool:
-      pre_pool_size = cfg.POOLING_SIZE * 2
-      grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
-      crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
       crops = F.max_pool2d(crops, 2, 2)
-    else:
-      grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, cfg.POOLING_SIZE, cfg.POOLING_SIZE)))
-      crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
-    
     return crops
 
   def _anchor_target_layer(self, rpn_cls_score):
