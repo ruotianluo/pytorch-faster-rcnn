@@ -114,10 +114,10 @@ class Network(nn.Module):
 
     # affine theta
     theta = Variable(rois.data.new(rois.size(0), 2, 3).zero_())
-    theta[:, 0, 0] = (x2 - x1) / (width - 1)
-    theta[:, 0 ,2] = (x1 + x2 - width + 1) / (width - 1)
-    theta[:, 1, 1] = (y2 - y1) / (height - 1)
-    theta[:, 1, 2] = (y1 + y2 - height + 1) / (height - 1)
+    theta[:, 0, 0] = ((x2 - x1) / (width - 1)).view(rois.size(0))
+    theta[:, 0 ,2] = ((x1 + x2 - width + 1) / (width - 1)).view(rois.size(0))
+    theta[:, 1, 1] = ((y2 - y1) / (height - 1)).view(rois.size(0))
+    theta[:, 1, 2] = ((y1 + y2 - height + 1) / (height - 1)).view(rois.size(0))
 
     pre_pool_size = cfg.POOLING_SIZE * 2 if max_pool else cfg.POOLING_SIZE
     grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
