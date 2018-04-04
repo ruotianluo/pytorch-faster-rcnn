@@ -69,41 +69,14 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   git clone https://github.com/ruotianluo/pytorch-faster-rcnn.git
   ```
 
-2. Choose your `-arch` option to match your GPU for step 3 and 4.
-
-  | GPU model  | Architecture |
-  | ------------- | ------------- |
-  | TitanX (Maxwell/Pascal) | sm_52 |
-  | GTX 960M | sm_50 |
-  | GTX 1080 (Ti) | sm_61 |
-  | Grid K520 (AWS g2.2xlarge) | sm_30 |
-  | Tesla K80 (AWS p2.xlarge) | sm_37 |
-
-  **Note**: You are welcome to contribute the settings on your end if you have made the code work properly on other GPUs.
-
-
-3. Build RoiPooling module
+2. Compile modules:
   ```
-  cd pytorch-faster-rcnn/lib/layer_utils/roi_pooling/src/cuda
-  echo "Compiling roi_pooling kernels by nvcc..."
-  nvcc -c -o roi_pooling_kernel.cu.o roi_pooling_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
-  cd ../../
-  python build.py
-  cd ../../../
+  cd pytorch-faster-rcnn/lib
+  bash make.sh
+  cd ../
   ```
 
-
-4. Build NMS
-  ```
-  cd lib/nms/src/cuda
-  echo "Compiling nms kernels by nvcc..."
-  nvcc -c -o nms_kernel.cu.o nms_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
-  cd ../../
-  python build.py
-  cd ../../
-  ```
-
-5. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
+3. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
   ```Shell
   cd data
   git clone https://github.com/pdollar/coco.git
