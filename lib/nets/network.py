@@ -240,7 +240,7 @@ class Network(nn.Module):
 
     # change it so that the score has 2 as its channel size
     rpn_cls_score_reshape = rpn_cls_score.view(1, 2, -1, rpn_cls_score.size()[-1]) # batch * 2 * (num_anchors*h) * w
-    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape)
+    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, dim=1)
     
     # Move channel to the last dimenstion, to fit the input of python functions
     rpn_cls_prob = rpn_cls_prob_reshape.view_as(rpn_cls_score).permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
@@ -275,7 +275,7 @@ class Network(nn.Module):
   def _region_classification(self, fc7):
     cls_score = self.cls_score_net(fc7)
     cls_pred = torch.max(cls_score, 1)[1]
-    cls_prob = F.softmax(cls_score)
+    cls_prob = F.softmax(cls_score, dim=1)
     bbox_pred = self.bbox_pred_net(fc7)
 
     self._predictions["cls_score"] = cls_score
