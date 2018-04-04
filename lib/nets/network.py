@@ -25,6 +25,7 @@ from layer_utils.proposal_target_layer import proposal_target_layer
 from utils.visualization import draw_bounding_boxes
 
 from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
+from layer_utils.roi_align.crop_and_resize import CropAndResizeFunction
 
 from model.config import cfg
 
@@ -112,18 +113,9 @@ class Network(nn.Module):
     height = bottom.size(2)
     width = bottom.size(3)
 
-    # affine theta
-    theta = Variable(rois.data.new(rois.size(0), 2, 3).zero_())
-    theta[:, 0, 0] = ((x2 - x1) / (width - 1)).view(-1)
-    theta[:, 0 ,2] = ((x1 + x2 - width + 1) / (width - 1)).view(-1)
-    theta[:, 1, 1] = ((y2 - y1) / (height - 1)).view(-1)
-    theta[:, 1, 2] = ((y1 + y2 - height + 1) / (height - 1)).view(-1)
-
     pre_pool_size = cfg.POOLING_SIZE * 2 if max_pool else cfg.POOLING_SIZE
-    grid = F.affine_grid(theta, torch.Size((rois.size(0), 1, pre_pool_size, pre_pool_size)))
-    torch.backends.cudnn.enabled = False
-    crops = F.grid_sample(bottom.expand(rois.size(0), bottom.size(1), bottom.size(2), bottom.size(3)), grid)
-    torch.backends.cudnn.enabled = True
+    crops = CropAndResizeFunction(pre_pool_size, pre_pool_size)(bottom, 
+      torch.cat([y1/(height-1),x1/(width-1),y2/(height-1),x2/(width-1)], 1), rois[:, 0].int())
     if max_pool:
       crops = F.max_pool2d(crops, 2, 2)
     return crops

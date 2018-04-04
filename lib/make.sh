@@ -13,6 +13,15 @@ nvcc -c -o roi_pooling_kernel.cu.o roi_pooling_kernel.cu -x cu -Xcompiler -fPIC 
 cd ../../
 python build.py
 cd ../../
+
+# Build RoIAlign
+cd layer_utils/roi_align/src/cuda
+echo 'Compiling crop_and_resize kernels by nvcc...'
+nvcc -c -o crop_and_resize_kernel.cu.o crop_and_resize_kernel.cu -x cu -Xcompiler -fPIC $CUDA_ARCH
+cd ../../
+python build.py
+cd ../../
+
 # Build NMS
 cd nms/src/cuda
 echo "Compiling nms kernels by nvcc..."
