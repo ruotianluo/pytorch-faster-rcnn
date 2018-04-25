@@ -136,10 +136,12 @@ if __name__ == '__main__':
     net.create_architecture(21,
                           tag='default', anchor_scales=[8, 16, 32])
 
-    net.load_state_dict(torch.load(saved_model))
+    net.load_state_dict(torch.load(saved_model, map_location=lambda storage, loc: storage))
 
     net.eval()
-    net.cuda()
+    if not torch.cuda.is_available():
+        net._device = 'cpu'
+    net.to(net._device)
 
     print('Loaded network {:s}'.format(saved_model))
 

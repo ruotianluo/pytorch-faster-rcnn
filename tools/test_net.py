@@ -104,11 +104,13 @@ if __name__ == '__main__':
                           anchor_ratios=cfg.ANCHOR_RATIOS)
 
   net.eval()
-  net.cuda()
+  if not torch.cuda.is_available():
+    net._device = 'cpu'
+  net.to(net._device)
 
   if args.model:
     print(('Loading model check point from {:s}').format(args.model))
-    net.load_state_dict(torch.load(args.model))
+    net.load_state_dict(torch.load(args.model, map_location=lambda storage, loc: storage))
     print('Loaded.')
   else:
     print(('Loading initial weights from {:s}').format(args.weight))

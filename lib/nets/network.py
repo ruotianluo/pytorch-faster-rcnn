@@ -47,6 +47,7 @@ class Network(nn.Module):
     self._event_summaries = {}
     self._image_gt_summaries = {}
     self._variables_to_fix = {}
+    self._device = 'cuda'
 
   def _add_gt_image(self):
     # add back mean
@@ -125,10 +126,10 @@ class Network(nn.Module):
       anchor_target_layer(
       rpn_cls_score.data, self._gt_boxes.data.cpu().numpy(), self._im_info, self._feat_stride, self._anchors.data.cpu().numpy(), self._num_anchors)
 
-    rpn_labels = Variable(torch.from_numpy(rpn_labels).float().cuda()) #.set_shape([1, 1, None, None])
-    rpn_bbox_targets = Variable(torch.from_numpy(rpn_bbox_targets).float().cuda())#.set_shape([1, None, None, self._num_anchors * 4])
-    rpn_bbox_inside_weights = Variable(torch.from_numpy(rpn_bbox_inside_weights).float().cuda())#.set_shape([1, None, None, self._num_anchors * 4])
-    rpn_bbox_outside_weights = Variable(torch.from_numpy(rpn_bbox_outside_weights).float().cuda())#.set_shape([1, None, None, self._num_anchors * 4])
+    rpn_labels = torch.from_numpy(rpn_labels).float().to(self._device) #.set_shape([1, 1, None, None])
+    rpn_bbox_targets = torch.from_numpy(rpn_bbox_targets).float().to(self._device)#.set_shape([1, None, None, self._num_anchors * 4])
+    rpn_bbox_inside_weights = torch.from_numpy(rpn_bbox_inside_weights).float().to(self._device)#.set_shape([1, None, None, self._num_anchors * 4])
+    rpn_bbox_outside_weights = torch.from_numpy(rpn_bbox_outside_weights).float().to(self._device)#.set_shape([1, None, None, self._num_anchors * 4])
 
     rpn_labels = rpn_labels.long()
     self._anchor_targets['rpn_labels'] = rpn_labels
@@ -164,7 +165,7 @@ class Network(nn.Module):
     anchors, anchor_length = generate_anchors_pre(\
                                           height, width,
                                            self._feat_stride, self._anchor_scales, self._anchor_ratios)
-    self._anchors = Variable(torch.from_numpy(anchors).cuda())
+    self._anchors = torch.from_numpy(anchors).to(self._device)
     self._anchor_length = anchor_length
 
   def _smooth_l1_loss(self, bbox_pred, bbox_targets, bbox_inside_weights, bbox_outside_weights, sigma=1.0, dim=[1]):
@@ -186,7 +187,7 @@ class Network(nn.Module):
     # RPN, class loss
     rpn_cls_score = self._predictions['rpn_cls_score_reshape'].view(-1, 2)
     rpn_label = self._anchor_targets['rpn_labels'].view(-1)
-    rpn_select = Variable((rpn_label.data != -1).nonzero().view(-1))
+    rpn_select = (rpn_label.data != -1).nonzero().view(-1)
     rpn_cls_score = rpn_cls_score.index_select(0, rpn_select).contiguous().view(-1, 2)
     rpn_label = rpn_label.index_select(0, rpn_select).contiguous().view(-1)
     rpn_cross_entropy = F.cross_entropy(rpn_cls_score, rpn_label)
@@ -325,7 +326,7 @@ class Network(nn.Module):
     summaries.append(self._add_gt_image_summary())
     # Add event_summaries
     for key, var in self._event_summaries.items():
-      summaries.append(tb.summary.scalar(key, var.data[0]))
+      summaries.append(tb.summary.scalar(key, var.item()))
     self._event_summaries = {}
     if not val:
       # Add score summaries
@@ -375,9 +376,9 @@ class Network(nn.Module):
     self._image_gt_summaries['gt_boxes'] = gt_boxes
     self._image_gt_summaries['im_info'] = im_info
 
-    self._image = Variable(torch.from_numpy(image.transpose([0,3,1,2])).cuda(), volatile=mode == 'TEST')
+    self._image = torch.from_numpy(image.transpose([0,3,1,2])).to(self._device)
     self._im_info = im_info # No need to change; actually it can be an list
-    self._gt_boxes = Variable(torch.from_numpy(gt_boxes).cuda()) if gt_boxes is not None else None
+    self._gt_boxes = torch.from_numpy(gt_boxes).to(self._device) if gt_boxes is not None else None
 
     self._mode = mode
 
@@ -386,7 +387,7 @@ class Network(nn.Module):
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
       means = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_MEANS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
-      self._predictions["bbox_pred"] = bbox_pred.mul(Variable(stds)).add(Variable(means))
+      self._predictions["bbox_pred"] = bbox_pred.mul(stds).add(means)
     else:
       self._add_losses() # compute losses
 
@@ -411,13 +412,14 @@ class Network(nn.Module):
   # Extract the head feature maps, for example for vgg16 it is conv5_3
   # only useful during testing mode
   def extract_head(self, image):
-    feat = self._layers["head"](Variable(torch.from_numpy(image.transpose([0,3,1,2])).cuda(), volatile=True))
+    feat = self._layers["head"](torch.from_numpy(image.transpose([0,3,1,2])).to(self._device))
     return feat
 
   # only useful during testing mode
   def test_image(self, image, im_info):
     self.eval()
-    self.forward(image, im_info, None, mode='TEST')
+    with torch.no_grad():
+      self.forward(image, im_info, None, mode='TEST')
     cls_score, cls_prob, bbox_pred, rois = self._predictions["cls_score"].data.cpu().numpy(), \
                                                      self._predictions['cls_prob'].data.cpu().numpy(), \
                                                      self._predictions['bbox_pred'].data.cpu().numpy(), \
@@ -440,11 +442,11 @@ class Network(nn.Module):
 
   def train_step(self, blobs, train_op):
     self.forward(blobs['data'], blobs['im_info'], blobs['gt_boxes'])
-    rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss = self._losses["rpn_cross_entropy"].data[0], \
-                                                                        self._losses['rpn_loss_box'].data[0], \
-                                                                        self._losses['cross_entropy'].data[0], \
-                                                                        self._losses['loss_box'].data[0], \
-                                                                        self._losses['total_loss'].data[0]
+    rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss = self._losses["rpn_cross_entropy"].item(), \
+                                                                        self._losses['rpn_loss_box'].item(), \
+                                                                        self._losses['cross_entropy'].item(), \
+                                                                        self._losses['loss_box'].item(), \
+                                                                        self._losses['total_loss'].item()
     #utils.timer.timer.tic('backward')
     train_op.zero_grad()
     self._losses['total_loss'].backward()
@@ -457,11 +459,11 @@ class Network(nn.Module):
 
   def train_step_with_summary(self, blobs, train_op):
     self.forward(blobs['data'], blobs['im_info'], blobs['gt_boxes'])
-    rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss = self._losses["rpn_cross_entropy"].data[0], \
-                                                                        self._losses['rpn_loss_box'].data[0], \
-                                                                        self._losses['cross_entropy'].data[0], \
-                                                                        self._losses['loss_box'].data[0], \
-                                                                        self._losses['total_loss'].data[0]
+    rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, loss = self._losses["rpn_cross_entropy"].item(), \
+                                                                        self._losses['rpn_loss_box'].item(), \
+                                                                        self._losses['cross_entropy'].item(), \
+                                                                        self._losses['loss_box'].item(), \
+                                                                        self._losses['total_loss'].item()
     train_op.zero_grad()
     self._losses['total_loss'].backward()
     train_op.step()

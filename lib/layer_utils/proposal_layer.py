@@ -13,8 +13,6 @@ from model.bbox_transform import bbox_transform_inv, clip_boxes
 from model.nms_wrapper import nms
 
 import torch
-from torch.autograd import Variable
-
 
 def proposal_layer(rpn_cls_prob, rpn_bbox_pred, im_info, cfg_key, _feat_stride, anchors, num_anchors):
   """A simplified version compared to fast/er RCNN
@@ -50,7 +48,7 @@ def proposal_layer(rpn_cls_prob, rpn_bbox_pred, im_info, cfg_key, _feat_stride, 
   scores = scores[keep,]
 
   # Only support single image as input
-  batch_inds = Variable(proposals.data.new(proposals.size(0), 1).zero_())
+  batch_inds = proposals.new_zeros(proposals.size(0), 1)
   blob = torch.cat((batch_inds, proposals), 1)
 
   return blob, scores

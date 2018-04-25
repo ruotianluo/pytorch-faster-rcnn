@@ -30,7 +30,7 @@ def proposal_top_layer(rpn_cls_prob, rpn_bbox_pred, im_info, _feat_stride, ancho
   if length < rpn_top_n:
     # Random selection, maybe unnecessary and loses good proposals
     # But such case rarely happens
-    top_inds = torch.from_numpy(npr.choice(length, size=rpn_top_n, replace=True)).long().cuda()
+    top_inds = torch.from_numpy(npr.choice(length, size=rpn_top_n, replace=True)).long().to(anchors.device)
   else:
     top_inds = scores.sort(0, descending=True)[1]
     top_inds = top_inds[:rpn_top_n]
@@ -50,6 +50,6 @@ def proposal_top_layer(rpn_cls_prob, rpn_bbox_pred, im_info, _feat_stride, ancho
   # Output rois blob
   # Our RPN implementation only supports a single input image, so all
   # batch inds are 0
-  batch_inds = proposals.data.new(proposals.size(0), 1).zero_()
+  batch_inds = proposals.new_zeros(proposals.size(0), 1)
   blob = torch.cat([batch_inds, proposals], 1)
   return blob, scores

@@ -233,7 +233,7 @@ class SolverWrapper(object):
     next_stepsize = stepsizes.pop()
 
     self.net.train()
-    self.net.cuda()
+    self.net.to(self.net._device)
 
     while iter < max_iters + 1:
       # Learning rate

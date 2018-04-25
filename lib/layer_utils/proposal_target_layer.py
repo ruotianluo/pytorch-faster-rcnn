@@ -16,7 +16,6 @@ from utils.bbox import bbox_overlaps
 
 
 import torch
-from torch.autograd import Variable
 
 def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
   """
@@ -31,7 +30,7 @@ def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
 
   # Include ground-truth boxes in the set of candidate rois
   if cfg.TRAIN.USE_GT:
-    zeros = rpn_rois.data.new(gt_boxes.shape[0], 1)
+    zeros = rpn_rois.new_zeros(gt_boxes.shape[0], 1)
     all_rois = torch.cat(
       (all_rois, torch.cat((zeros, gt_boxes[:, :-1]), 1))
     , 0)
@@ -55,7 +54,7 @@ def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
   bbox_inside_weights = bbox_inside_weights.view(-1, _num_classes * 4)
   bbox_outside_weights = (bbox_inside_weights > 0).float()
 
-  return rois, roi_scores, labels, Variable(bbox_targets), Variable(bbox_inside_weights), Variable(bbox_outside_weights)
+  return rois, roi_scores, labels, bbox_targets, bbox_inside_weights, bbox_outside_weights
 
 
 def _get_bbox_regression_labels(bbox_target_data, num_classes):
@@ -72,8 +71,8 @@ def _get_bbox_regression_labels(bbox_target_data, num_classes):
   # Inputs are tensor
 
   clss = bbox_target_data[:, 0]
-  bbox_targets = clss.new(clss.numel(), 4 * num_classes).zero_()
-  bbox_inside_weights = clss.new(bbox_targets.shape).zero_()
+  bbox_targets = clss.new_zeros(clss.numel(), 4 * num_classes)
+  bbox_inside_weights = clss.new_zeros(bbox_targets.shape)
   inds = (clss > 0).nonzero().view(-1)
   if inds.numel() > 0:
     clss = clss[inds].contiguous().view(-1,1)
@@ -122,17 +121,17 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image, rois_per_ima
   # Small modification to the original version where we ensure a fixed number of regions are sampled
   if fg_inds.numel() > 0 and bg_inds.numel() > 0:
     fg_rois_per_image = min(fg_rois_per_image, fg_inds.numel())
-    fg_inds = fg_inds[torch.from_numpy(npr.choice(np.arange(0, fg_inds.numel()), size=int(fg_rois_per_image), replace=False)).long().cuda()]
+    fg_inds = fg_inds[torch.from_numpy(npr.choice(np.arange(0, fg_inds.numel()), size=int(fg_rois_per_image), replace=False)).long().to(gt_boxes.device)]
     bg_rois_per_image = rois_per_image - fg_rois_per_image
     to_replace = bg_inds.numel() < bg_rois_per_image
-    bg_inds = bg_inds[torch.from_numpy(npr.choice(np.arange(0, bg_inds.numel()), size=int(bg_rois_per_image), replace=to_replace)).long().cuda()]
+    bg_inds = bg_inds[torch.from_numpy(npr.choice(np.arange(0, bg_inds.numel()), size=int(bg_rois_per_image), replace=to_replace)).long().to(gt_boxes.device)]
   elif fg_inds.numel() > 0:
     to_replace = fg_inds.numel() < rois_per_image
-    fg_inds = fg_inds[torch.from_numpy(npr.choice(np.arange(0, fg_inds.numel()), size=int(rois_per_image), replace=to_replace)).long().cuda()]
+    fg_inds = fg_inds[torch.from_numpy(npr.choice(np.arange(0, fg_inds.numel()), size=int(rois_per_image), replace=to_replace)).long().to(gt_boxes.device)]
     fg_rois_per_image = rois_per_image
   elif bg_inds.numel() > 0:
     to_replace = bg_inds.numel() < rois_per_image
-    bg_inds = bg_inds[torch.from_numpy(npr.choice(np.arange(0, bg_inds.numel()), size=int(rois_per_image), replace=to_replace)).long().cuda()]
+    bg_inds = bg_inds[torch.from_numpy(npr.choice(np.arange(0, bg_inds.numel()), size=int(rois_per_image), replace=to_replace)).long().to(gt_boxes.device)]
     fg_rois_per_image = 0
   else:
     import pdb
