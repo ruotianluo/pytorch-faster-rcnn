@@ -229,22 +229,18 @@ class mobilenetv1(Network):
     self.mobilenet.apply(set_bn_fix)
 
     # Add weight decay
-    def l2_regularizer(m, wd):
+    def l2_regularizer(m, wd, regu_depth):
       if m.__class__.__name__.find('Conv') != -1:
-        m.weight.weight_decay = cfg.MOBILENET.WEIGHT_DECAY
-    if cfg.MOBILENET.REGU_DEPTH:
-      self.mobilenet.apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY))
-    else:
-      self.mobilenet.apply(lambda x: l2_regularizer(x, 0))
-      # always set the first conv layer
-      list(self.mobilenet.children())[0].apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY))
+        if regu_depth or m.groups == 1:
+            m.weight.weight_decay = wd
+        else:
+            m.weight.weight_decay = 0
+    self.mobilenet.apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY, cfg.MOBILENET.REGU_DEPTH))
 
     # Build mobilenet.
     self._layers['head'] = nn.Sequential(*list(self.mobilenet.children())[:12])
     self._layers['tail'] = nn.Sequential(*list(self.mobilenet.children())[12:])
 
   def load_pretrained_cnn(self, state_dict):
-    # TODO
     print('Warning: No available pretrained model yet')
-    return
-    self.mobilenet.load_state_dict({k: state_dict[k] for k in list(self.resnet.state_dict())})
+    self.mobilenet.load_state_dict({k: state_dict['features.'+k] for k in list(self.mobilenet.state_dict())})

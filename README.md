@@ -88,7 +88,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
 ### Setup data
 Please follow the instructions of py-faster-rcnn [here](https://github.com/rbgirshick/py-faster-rcnn#beyond-the-demo-installation-for-training-and-testing-models) to setup VOC and COCO datasets (Part of COCO is done). The steps involve downloading data and optionally creating soft links in the ``data`` folder. Since faster RCNN does not rely on pre-computed proposals, it is safe to ignore the steps that setup proposals.
 
-If you find it useful, the ``data/cache`` folder created on Xinlei's side is also shared [here](http://ladoga.graphics.cs.cmu.edu/xinleic/tf-faster-rcnn/cache.tgz).
+If you find it useful, the ``data/cache`` folder created on Xinlei's side is also shared [here](https://drive.google.com/drive/folders/0B1_fAEgxdnvJSmF3YUlZcHFqWTQ).
 
 ### Demo and Test with pre-trained models
 1. Download pre-trained model (only google drive works)
@@ -170,6 +170,15 @@ This script will create a `.pth` file with the same name in the same folder as t
    cd data/imagenet_weights
    # download from my gdrive (link in pytorch-resnet)
    mv resnet101-caffe.pth res101.pth
+   cd ../..
+   ```
+
+   For Mobilenet V1, you can set up like:
+   ```Shell
+   mkdir -p data/imagenet_weights
+   cd data/imagenet_weights
+   # download from my gdrive (https://drive.google.com/open?id=0B7fNdx_jAqhtZGJvZlpVeDhUN1k)
+   mv mobilenet_v1_1.0_224.pth.pth mobile.pth
    cd ../..
    ```
 
