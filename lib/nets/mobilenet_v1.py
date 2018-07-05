@@ -241,6 +241,22 @@ class mobilenetv1(Network):
     self._layers['head'] = nn.Sequential(*list(self.mobilenet.children())[:12])
     self._layers['tail'] = nn.Sequential(*list(self.mobilenet.children())[12:])
 
+  def train(self, mode=True):
+    # Override train so that the training mode is set as we want
+    nn.Module.train(self, mode)
+    if mode:
+      # Set fixed blocks to be in eval mode (not really doing anything)
+      for m in list(self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
+        m.eval()
+
+      # Set batchnorm always in eval mode during training
+      def set_bn_eval(m):
+        classname = m.__class__.__name__
+        if classname.find('BatchNorm') != -1:
+          m.eval()
+
+      self.mobilenet.apply(set_bn_eval)
+
   def load_pretrained_cnn(self, state_dict):
     print('Warning: No available pretrained model yet')
     self.mobilenet.load_state_dict({k: state_dict['features.'+k] for k in list(self.mobilenet.state_dict())})

@@ -24,7 +24,7 @@ With Resnet101 (last ``conv4``):
   - Train on COCO 2014 trainval35k and test on minival (800k/1190k), **35.1**(from scratch) **35.4**(converted) （**35.4** for tf-faster-rcnn).
 
 More Results:
-  - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), **21.9**(converted) （**21.8** for tf-faster-rcnn).
+  - Train Mobilenet (1.0, 224) on COCO 2014 trainval35k and test on minival (900k/1190k), **21.4**(from scratch), **21.9**(converted) （**21.8** for tf-faster-rcnn).
   - Train Resnet50 on COCO 2014 trainval35k and test on minival (900k/1190k), **32.4**(converted) (**32.4** for tf-faster-rcnn).
   - Train Resnet152 on COCO 2014 trainval35k and test on minival (900k/1190k), **36.7**(converted) (**36.1** for tf-faster-rcnn).
 
