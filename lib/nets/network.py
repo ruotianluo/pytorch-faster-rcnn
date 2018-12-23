@@ -24,8 +24,10 @@ from layer_utils.anchor_target_layer import anchor_target_layer
 from layer_utils.proposal_target_layer import proposal_target_layer
 from utils.visualization import draw_bounding_boxes
 
-from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
-from layer_utils.roi_align.crop_and_resize import CropAndResizeFunction
+# from layer_utils.roi_pooling.roi_pool import RoIPoolFunction
+# from layer_utils.roi_align.crop_and_resize import CropAndResizeFunction
+
+from layer_utils.roi_layers import ROIAlign, ROIPool
 
 from model.config import cfg
 
@@ -89,37 +91,40 @@ class Network(nn.Module):
     return rois, rpn_scores
 
   def _roi_pool_layer(self, bottom, rois):
-    return RoIPoolFunction(cfg.POOLING_SIZE, cfg.POOLING_SIZE, 1. / 16.)(bottom, rois)
+    return ROIPool((cfg.POOLING_SIZE, cfg.POOLING_SIZE), 1.0/16.0)(bottom, rois)
 
-  def _crop_pool_layer(self, bottom, rois, max_pool=True):
-    # implement it using stn
-    # box to affine
-    # input (x1,y1,x2,y2)
-    """
-    [  x2-x1             x1 + x2 - W + 1  ]
-    [  -----      0      ---------------  ]
-    [  W - 1                  W - 1       ]
-    [                                     ]
-    [           y2-y1    y1 + y2 - H + 1  ]
-    [    0      -----    ---------------  ]
-    [           H - 1         H - 1      ]
-    """
-    rois = rois.detach()
+  def _roi_align_layer(self, bottom, rois):
+    return ROIAlign((cfg.POOLING_SIZE, cfg.POOLING_SIZE), 1.0/16.0, 0)(bottom, rois)
 
-    x1 = rois[:, 1::4] / 16.0
-    y1 = rois[:, 2::4] / 16.0
-    x2 = rois[:, 3::4] / 16.0
-    y2 = rois[:, 4::4] / 16.0
+  # def _crop_pool_layer(self, bottom, rois, max_pool=True):
+  #   # implement it using stn
+  #   # box to affine
+  #   # input (x1,y1,x2,y2)
+  #   """
+  #   [  x2-x1             x1 + x2 - W + 1  ]
+  #   [  -----      0      ---------------  ]
+  #   [  W - 1                  W - 1       ]
+  #   [                                     ]
+  #   [           y2-y1    y1 + y2 - H + 1  ]
+  #   [    0      -----    ---------------  ]
+  #   [           H - 1         H - 1      ]
+  #   """
+  #   rois = rois.detach()
 
-    height = bottom.size(2)
-    width = bottom.size(3)
+  #   x1 = rois[:, 1::4] / 16.0
+  #   y1 = rois[:, 2::4] / 16.0
+  #   x2 = rois[:, 3::4] / 16.0
+  #   y2 = rois[:, 4::4] / 16.0
 
-    pre_pool_size = cfg.POOLING_SIZE * 2 if max_pool else cfg.POOLING_SIZE
-    crops = CropAndResizeFunction(pre_pool_size, pre_pool_size)(bottom, 
-      torch.cat([y1/(height-1),x1/(width-1),y2/(height-1),x2/(width-1)], 1), rois[:, 0].int())
-    if max_pool:
-      crops = F.max_pool2d(crops, 2, 2)
-    return crops
+  #   height = bottom.size(2)
+  #   width = bottom.size(3)
+
+  #   pre_pool_size = cfg.POOLING_SIZE * 2 if max_pool else cfg.POOLING_SIZE
+  #   crops = CropAndResizeFunction(pre_pool_size, pre_pool_size)(bottom, 
+  #     torch.cat([y1/(height-1),x1/(width-1),y2/(height-1),x2/(width-1)], 1), rois[:, 0].int())
+  #   if max_pool:
+  #     crops = F.max_pool2d(crops, 2, 2)
+  #   return crops
 
   def _anchor_target_layer(self, rpn_cls_score):
     rpn_labels, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights = \
@@ -355,8 +360,8 @@ class Network(nn.Module):
     self._anchor_component(net_conv.size(2), net_conv.size(3))
    
     rois = self._region_proposal(net_conv)
-    if cfg.POOLING_MODE == 'crop':
-      pool5 = self._crop_pool_layer(net_conv, rois)
+    if cfg.POOLING_MODE == 'align':
+      pool5 = self._roi_align_layer(net_conv, rois)
     else:
       pool5 = self._roi_pool_layer(net_conv, rois)
 

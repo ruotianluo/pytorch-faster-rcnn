@@ -17,7 +17,8 @@ import os
 import math
 
 from utils.timer import Timer
-from model.nms_wrapper import nms
+# from model.nms_wrapper import nms
+from layer_utils.roi_layers import nms
 from utils.blob import im_list_to_blob
 
 from model.config import cfg, get_output_dir
@@ -108,34 +109,34 @@ def im_detect(net, im):
 
   return scores, pred_boxes
 
-def apply_nms(all_boxes, thresh):
-  """Apply non-maximum suppression to all predicted boxes output by the
-  test_net method.
-  """
-  num_classes = len(all_boxes)
-  num_images = len(all_boxes[0])
-  nms_boxes = [[[] for _ in range(num_images)] for _ in range(num_classes)]
-  for cls_ind in range(num_classes):
-    for im_ind in range(num_images):
-      dets = all_boxes[cls_ind][im_ind]
-      if dets == []:
-        continue
+# def apply_nms(all_boxes, thresh):
+#   """Apply non-maximum suppression to all predicted boxes output by the
+#   test_net method.
+#   """
+#   num_classes = len(all_boxes)
+#   num_images = len(all_boxes[0])
+#   nms_boxes = [[[] for _ in range(num_images)] for _ in range(num_classes)]
+#   for cls_ind in range(num_classes):
+#     for im_ind in range(num_images):
+#       dets = all_boxes[cls_ind][im_ind]
+#       if dets == []:
+#         continue
 
-      x1 = dets[:, 0]
-      y1 = dets[:, 1]
-      x2 = dets[:, 2]
-      y2 = dets[:, 3]
-      scores = dets[:, 4]
-      inds = np.where((x2 > x1) & (y2 > y1))[0]
-      dets = dets[inds,:]
-      if dets == []:
-        continue
+#       x1 = dets[:, 0]
+#       y1 = dets[:, 1]
+#       x2 = dets[:, 2]
+#       y2 = dets[:, 3]
+#       scores = dets[:, 4]
+#       inds = np.where((x2 > x1) & (y2 > y1))[0]
+#       dets = dets[inds,:]
+#       if dets == []:
+#         continue
 
-      keep = nms(torch.from_numpy(dets), thresh).numpy()
-      if len(keep) == 0:
-        continue
-      nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()
-  return nms_boxes
+#       keep = nms(torch.from_numpy(dets), thresh).numpy()
+#       if len(keep) == 0:
+#         continue
+#       nms_boxes[cls_ind][im_ind] = dets[keep, :].copy()
+#   return nms_boxes
 
 def test_net(net, imdb, weights_filename, max_per_image=100, thresh=0.):
   np.random.seed(cfg.RNG_SEED)
@@ -167,7 +168,8 @@ def test_net(net, imdb, weights_filename, max_per_image=100, thresh=0.):
       cls_boxes = boxes[inds, j*4:(j+1)*4]
       cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
         .astype(np.float32, copy=False)
-      keep = nms(torch.from_numpy(cls_dets), cfg.TEST.NMS).numpy() if cls_dets.size > 0 else []
+      # keep = nms(torch.from_numpy(cls_dets), cfg.TEST.NMS).numpy() if cls_dets.size > 0 else []
+      keep = nms(torch.from_numpy(cls_boxes), cls_scores, cfg.TEST.NMS).numpy() if cls_dets.size > 0 else []
       cls_dets = cls_dets[keep, :]
       all_boxes[j][i] = cls_dets
 

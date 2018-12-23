@@ -270,7 +270,7 @@ __C.EXP_DIR = 'default'
 __C.USE_GPU_NMS = True
 
 # Default pooling mode
-__C.POOLING_MODE = 'crop'
+__C.POOLING_MODE = 'align'
 
 # Size of the pooled region after RoI pooling
 __C.POOLING_SIZE = 7

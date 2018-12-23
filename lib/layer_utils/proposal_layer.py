@@ -10,7 +10,8 @@ from __future__ import print_function
 import numpy as np
 from model.config import cfg
 from model.bbox_transform import bbox_transform_inv, clip_boxes
-from model.nms_wrapper import nms
+# from model.nms_wrapper import nms
+from layer_utils.roi_layers import nms
 
 import torch
 
@@ -39,7 +40,8 @@ def proposal_layer(rpn_cls_prob, rpn_bbox_pred, im_info, cfg_key, _feat_stride, 
   proposals = proposals[order.data, :]
 
   # Non-maximal suppression
-  keep = nms(torch.cat((proposals, scores), 1).data, nms_thresh)
+  # keep = nms(torch.cat((proposals, scores), 1).data, nms_thresh)
+  keep = nms(proposals, scores.squeeze(1), nms_thresh)
 
   # Pick th top region proposals after NMS
   if post_nms_topN > 0:

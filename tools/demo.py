@@ -18,7 +18,9 @@ from __future__ import print_function
 import _init_paths
 from model.config import cfg
 from model.test import im_detect
-from model.nms_wrapper import nms
+# from model.nms_wrapper import nms
+
+from layer_utils.roi_layers import nms
 
 from utils.timer import Timer
 import matplotlib.pyplot as plt
@@ -96,7 +98,8 @@ def demo(net, image_name):
         cls_scores = scores[:, cls_ind]
         dets = np.hstack((cls_boxes,
                           cls_scores[:, np.newaxis])).astype(np.float32)
-        keep = nms(torch.from_numpy(dets), NMS_THRESH)
+        # keep = nms(torch.from_numpy(dets), NMS_THRESH)
+        keep = nms(cls_boxes, cls_scores, NMS_THRESH)
         dets = dets[keep.numpy(), :]
         vis_detections(im, cls, dets, thresh=CONF_THRESH)
 

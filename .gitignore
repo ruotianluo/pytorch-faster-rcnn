@@ -6,4 +6,5 @@ lib/build
 lib/pycocotools
 lib/pycocotools/_mask.c
 lib/pycocotools/_mask.so
+lib/faster_rcnn.egg-info
 .idea
