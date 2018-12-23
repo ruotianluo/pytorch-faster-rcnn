@@ -61,3 +61,4 @@ class ROIPool(nn.Module):
         tmpstr += ", spatial_scale=" + str(self.spatial_scale)
         tmpstr += ")"
         return tmpstr
+

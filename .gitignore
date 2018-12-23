@@ -1,5 +1,6 @@
 *.so
 *.pyc
+*.ipynb_checkpoints
 output
 tensorboard
 lib/build

@@ -66,3 +66,4 @@ class ROIAlign(nn.Module):
         tmpstr += ", sampling_ratio=" + str(self.sampling_ratio)
         tmpstr += ")"
         return tmpstr
+

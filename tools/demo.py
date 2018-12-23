@@ -99,7 +99,7 @@ def demo(net, image_name):
         dets = np.hstack((cls_boxes,
                           cls_scores[:, np.newaxis])).astype(np.float32)
         # keep = nms(torch.from_numpy(dets), NMS_THRESH)
-        keep = nms(cls_boxes, cls_scores, NMS_THRESH)
+        keep = nms(torch.from_numpy(cls_boxes), torch.from_numpy(cls_scores), NMS_THRESH)
         dets = dets[keep.numpy(), :]
         vis_detections(im, cls, dets, thresh=CONF_THRESH)
 
