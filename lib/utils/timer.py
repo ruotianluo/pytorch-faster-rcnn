@@ -8,8 +8,10 @@
 import time
 import torch
 
+
 class Timer(object):
     """A simple timer."""
+
     def __init__(self):
         self._total_time = {}
         self._calls = {}
@@ -28,8 +30,9 @@ class Timer(object):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         self._diff[name] = time.time() - self._start_time[name]
-        self._total_time[name] = self._total_time.get(name, 0.) + self._diff[name]
-        self._calls[name] = self._calls.get(name, 0 ) + 1
+        self._total_time[name] = self._total_time.get(name,
+                                                      0.) + self._diff[name]
+        self._calls[name] = self._calls.get(name, 0) + 1
         self._average_time[name] = self._total_time[name] / self._calls[name]
         if average:
             return self._average_time[name]
@@ -41,5 +44,6 @@ class Timer(object):
 
     def total_time(self, name='default'):
         return self._total_time[name]
+
 
 timer = Timer()

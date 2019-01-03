@@ -48,6 +48,7 @@ _CONV_DEFS = [
     DepthSepConv(kernel=3, stride=1, depth=1024)
 ]
 
+
 def mobilenet_v1_base(final_endpoint='Conv2d_13_pointwise',
                       min_depth=8,
                       depth_multiplier=1.0,
@@ -105,10 +106,13 @@ def mobilenet_v1_base(final_endpoint='Conv2d_13_pointwise',
 
     def conv_bn(in_channels, out_channels, kernel_size=3, stride=1):
         return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride, (kernel_size - 1) // 2, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU6(inplace=True)
-        )
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride, (kernel_size - 1) // 2,
+                bias=False), nn.BatchNorm2d(out_channels),
+            nn.ReLU6(inplace=True))
 
     def conv_dw(in_channels, kernel_size=3, stride=1, dilation=1):
         return nn.Sequential(
@@ -118,9 +122,11 @@ def mobilenet_v1_base(final_endpoint='Conv2d_13_pointwise',
             nn.ReLU6(inplace=True)
         )
 
-    def conv_pw(in_channels, out_channels, kernel_size=3, stride=1, dilation=1):
+    def conv_pw(in_channels, out_channels, kernel_size=3, stride=1,
+                dilation=1):
         return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride, 0, bias=False),
+            nn.Conv2d(
+                in_channels, out_channels, kernel_size, stride, 0, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU6(inplace=True),
         )
@@ -154,109 +160,135 @@ def mobilenet_v1_base(final_endpoint='Conv2d_13_pointwise',
         out_channels = depth(conv_def.depth)
         if isinstance(conv_def, Conv):
             end_point = end_point_base
-            end_points[end_point] = conv_bn(in_channels, out_channels, conv_def.kernel,
-                                            stride=conv_def.stride)
+            end_points[end_point] = conv_bn(
+                in_channels,
+                out_channels,
+                conv_def.kernel,
+                stride=conv_def.stride)
             if end_point == final_endpoint:
                 return nn.Sequential(end_points)
 
         elif isinstance(conv_def, DepthSepConv):
-            end_points[end_point_base] = nn.Sequential(OrderedDict([
-                ('depthwise', conv_dw(in_channels, conv_def.kernel, stride=layer_stride, dilation=layer_rate)),
-                ('pointwise', conv_pw(in_channels, out_channels, 1, stride=1))]))
+            end_points[end_point_base] = nn.Sequential(
+                OrderedDict([('depthwise',
+                              conv_dw(
+                                  in_channels,
+                                  conv_def.kernel,
+                                  stride=layer_stride,
+                                  dilation=layer_rate)),
+                             ('pointwise',
+                              conv_pw(in_channels, out_channels, 1,
+                                      stride=1))]))
 
             if end_point_base + '_pointwise' == final_endpoint:
                 return nn.Sequential(end_points)
         else:
-            raise ValueError('Unknown convolution type %s for layer %d'
-                                                % (conv_def.ltype, i))
+            raise ValueError('Unknown convolution type %s for layer %d' %
+                             (conv_def.ltype, i))
         in_channels = out_channels
     raise ValueError('Unknown final endpoint %s' % final_endpoint)
 
-class mobilenetv1(Network):
-  def __init__(self):
-    Network.__init__(self)
-    self._feat_stride = [16, ]
-    self._feat_compress = [1. / float(self._feat_stride[0]), ]
-    self._depth_multiplier = cfg.MOBILENET.DEPTH_MULTIPLIER
-    self._net_conv_channels = 512
-    self._fc7_channels = 1024
 
-  def init_weights(self):
-    def normal_init(m, mean, stddev, truncated=False):
-      """
+class mobilenetv1(Network):
+    def __init__(self):
+        Network.__init__(self)
+        self._feat_stride = [
+            16,
+        ]
+        self._feat_compress = [
+            1. / float(self._feat_stride[0]),
+        ]
+        self._depth_multiplier = cfg.MOBILENET.DEPTH_MULTIPLIER
+        self._net_conv_channels = 512
+        self._fc7_channels = 1024
+
+    def init_weights(self):
+        def normal_init(m, mean, stddev, truncated=False):
+            """
       weight initalizer: truncated normal and random normal.
       """
-      if m.__class__.__name__.find('Conv') == -1:
-        return
-      if truncated:
-        m.weight.data.normal_().fmod_(2).mul_(stddev).add_(mean) # not a perfect approximation
-      else:
-        m.weight.data.normal_(mean, stddev)
-      if m.bias is not None: m.bias.data.zero_()
-      
-    self.mobilenet.apply(lambda m: normal_init(m, 0, 0.09, True))
-    normal_init(self.rpn_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
-    normal_init(self.rpn_cls_score_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
-    normal_init(self.rpn_bbox_pred_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
-    normal_init(self.cls_score_net, 0, 0.01,  cfg.TRAIN.TRUNCATED)
-    normal_init(self.bbox_pred_net, 0, 0.001,  cfg.TRAIN.TRUNCATED)
+            if m.__class__.__name__.find('Conv') == -1:
+                return
+            if truncated:
+                m.weight.data.normal_().fmod_(2).mul_(stddev).add_(
+                    mean)  # not a perfect approximation
+            else:
+                m.weight.data.normal_(mean, stddev)
+            if m.bias is not None: m.bias.data.zero_()
 
-  def _image_to_head(self):
-    net_conv = self._layers['head'](self._image)
-    self._act_summaries['conv'] = net_conv
+        self.mobilenet.apply(lambda m: normal_init(m, 0, 0.09, True))
+        normal_init(self.rpn_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
+        normal_init(self.rpn_cls_score_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
+        normal_init(self.rpn_bbox_pred_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
+        normal_init(self.cls_score_net, 0, 0.01, cfg.TRAIN.TRUNCATED)
+        normal_init(self.bbox_pred_net, 0, 0.001, cfg.TRAIN.TRUNCATED)
 
-    return net_conv
+    def _image_to_head(self):
+        net_conv = self._layers['head'](self._image)
+        self._act_summaries['conv'] = net_conv
 
-  def _head_to_tail(self, pool5):
-    fc7 = self._layers['tail'](pool5)
-    fc7 = fc7.mean(3).mean(2)
-    return fc7
+        return net_conv
 
-  def _init_head_tail(self):
-    self.mobilenet = mobilenet_v1_base()
+    def _head_to_tail(self, pool5):
+        fc7 = self._layers['tail'](pool5)
+        fc7 = fc7.mean(3).mean(2)
+        return fc7
 
-    # Fix blocks  
-    assert (0 <= cfg.MOBILENET.FIXED_LAYERS <= 12)
-    for m in list(self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
-      for p in m.parameters():
-        p.requires_grad = False
-    
-    def set_bn_fix(m):
-      classname = m.__class__.__name__
-      if classname.find('BatchNorm') != -1:
-        for p in m.parameters(): p.requires_grad=False
+    def _init_head_tail(self):
+        self.mobilenet = mobilenet_v1_base()
 
-    self.mobilenet.apply(set_bn_fix)
+        # Fix blocks
+        assert (0 <= cfg.MOBILENET.FIXED_LAYERS <= 12)
+        for m in list(self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
+            for p in m.parameters():
+                p.requires_grad = False
 
-    # Add weight decay
-    def l2_regularizer(m, wd, regu_depth):
-      if m.__class__.__name__.find('Conv') != -1:
-        if regu_depth or m.groups == 1:
-            m.weight.weight_decay = wd
-        else:
-            m.weight.weight_decay = 0
-    self.mobilenet.apply(lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY, cfg.MOBILENET.REGU_DEPTH))
+        def set_bn_fix(m):
+            classname = m.__class__.__name__
+            if classname.find('BatchNorm') != -1:
+                for p in m.parameters():
+                    p.requires_grad = False
 
-    # Build mobilenet.
-    self._layers['head'] = nn.Sequential(*list(self.mobilenet.children())[:12])
-    self._layers['tail'] = nn.Sequential(*list(self.mobilenet.children())[12:])
+        self.mobilenet.apply(set_bn_fix)
 
-  def train(self, mode=True):
-    # Override train so that the training mode is set as we want
-    nn.Module.train(self, mode)
-    if mode:
-      # Set fixed blocks to be in eval mode (not really doing anything)
-      for m in list(self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
-        m.eval()
+        # Add weight decay
+        def l2_regularizer(m, wd, regu_depth):
+            if m.__class__.__name__.find('Conv') != -1:
+                if regu_depth or m.groups == 1:
+                    m.weight.weight_decay = wd
+                else:
+                    m.weight.weight_decay = 0
 
-      # Set batchnorm always in eval mode during training
-      def set_bn_eval(m):
-        classname = m.__class__.__name__
-        if classname.find('BatchNorm') != -1:
-          m.eval()
+        self.mobilenet.apply(
+            lambda x: l2_regularizer(x, cfg.MOBILENET.WEIGHT_DECAY, cfg.MOBILENET.REGU_DEPTH)
+        )
 
-      self.mobilenet.apply(set_bn_eval)
+        # Build mobilenet.
+        self._layers['head'] = nn.Sequential(
+            *list(self.mobilenet.children())[:12])
+        self._layers['tail'] = nn.Sequential(
+            *list(self.mobilenet.children())[12:])
 
-  def load_pretrained_cnn(self, state_dict):
-    print('Warning: No available pretrained model yet')
-    self.mobilenet.load_state_dict({k: state_dict['features.'+k] for k in list(self.mobilenet.state_dict())})
+    def train(self, mode=True):
+        # Override train so that the training mode is set as we want
+        nn.Module.train(self, mode)
+        if mode:
+            # Set fixed blocks to be in eval mode (not really doing anything)
+            for m in list(
+                    self.mobilenet.children())[:cfg.MOBILENET.FIXED_LAYERS]:
+                m.eval()
+
+            # Set batchnorm always in eval mode during training
+            def set_bn_eval(m):
+                classname = m.__class__.__name__
+                if classname.find('BatchNorm') != -1:
+                    m.eval()
+
+            self.mobilenet.apply(set_bn_eval)
+
+    def load_pretrained_cnn(self, state_dict):
+        print('Warning: No available pretrained model yet')
+        self.mobilenet.load_state_dict({
+            k: state_dict['features.' + k]
+            for k in list(self.mobilenet.state_dict())
+        })

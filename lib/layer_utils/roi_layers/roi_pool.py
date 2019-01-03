@@ -14,9 +14,8 @@ class _ROIPool(Function):
         ctx.output_size = _pair(output_size)
         ctx.spatial_scale = spatial_scale
         ctx.input_shape = input.size()
-        output, argmax = _C.roi_pool_forward(
-            input, roi, spatial_scale, output_size[0], output_size[1]
-        )
+        output, argmax = _C.roi_pool_forward(input, roi, spatial_scale,
+                                             output_size[0], output_size[1])
         ctx.save_for_backward(input, roi, argmax)
         return output
 
@@ -61,4 +60,3 @@ class ROIPool(nn.Module):
         tmpstr += ", spatial_scale=" + str(self.spatial_scale)
         tmpstr += ")"
         return tmpstr
-
