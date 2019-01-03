@@ -69,7 +69,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   git clone https://github.com/ruotianluo/pytorch-faster-rcnn.git
   ```
 
-2. Compile modules(nms, roi_pooling(from [longcw/yolo2-pytorch](https://github.com/longcw/yolo2-pytorch)), roi_align(from [longcw/RoIAlign.pytorch](https://github.com/longcw/RoIAlign.pytorch.git))):
+2. Compile modules(nms, roi_pooling, and roi_align(from [facebookresearch/maskrcnn-benchmark](https://github.com/facebookresearch/maskrcnn-benchmark.git))):
   ```
   cd pytorch-faster-rcnn/lib
   python setup.py build develop
