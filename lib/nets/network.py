@@ -63,7 +63,7 @@ class Network(nn.Module):
                           self._gt_image, self._image_gt_summaries['gt_boxes'], self._image_gt_summaries['im_info'])
 
         return tb.summary.image('GROUND_TRUTH',
-                                image[0].astype('float32') / 255.0)
+                                image[0].astype('float32') / 255.0, dataformats='HWC')
 
     def _add_act_summary(self, key, tensor):
         return tb.summary.histogram(
@@ -518,5 +518,6 @@ class Network(nn.Module):
     To provide back compatibility, we overwrite the load_state_dict
     """
         nn.Module.load_state_dict(
-            self, {k: state_dict[k]
-                   for k in list(self.state_dict())})
+            self, {k: v
+                   for k, v in state_dict.items() if k in self.state_dict()}
+            )
