@@ -17,7 +17,7 @@ import os
 import math
 
 from utils.timer import Timer
-from layer_utils.roi_layers import nms
+from torchvision.ops import nms
 from utils.blob import im_list_to_blob
 
 from model.config import cfg, get_output_dir
