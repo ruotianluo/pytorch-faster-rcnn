@@ -24,7 +24,7 @@ from layer_utils.anchor_target_layer import anchor_target_layer
 from layer_utils.proposal_target_layer import proposal_target_layer
 from utils.visualization import draw_bounding_boxes
 
-from layer_utils.roi_layers import ROIAlign, ROIPool
+from torchvision.ops import RoIAlign, RoIPool
 
 from model.config import cfg
 
@@ -95,11 +95,11 @@ class Network(nn.Module):
         return rois, rpn_scores
 
     def _roi_pool_layer(self, bottom, rois):
-        return ROIPool((cfg.POOLING_SIZE, cfg.POOLING_SIZE),
+        return RoIPool((cfg.POOLING_SIZE, cfg.POOLING_SIZE),
                        1.0 / 16.0)(bottom, rois)
 
     def _roi_align_layer(self, bottom, rois):
-        return ROIAlign((cfg.POOLING_SIZE, cfg.POOLING_SIZE), 1.0 / 16.0,
+        return RoIAlign((cfg.POOLING_SIZE, cfg.POOLING_SIZE), 1.0 / 16.0,
                         0)(bottom, rois)
 
     def _anchor_target_layer(self, rpn_cls_score):

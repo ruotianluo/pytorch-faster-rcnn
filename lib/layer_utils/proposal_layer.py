@@ -10,7 +10,7 @@ from __future__ import print_function
 import numpy as np
 from model.config import cfg
 from model.bbox_transform import bbox_transform_inv, clip_boxes
-from layer_utils.roi_layers import nms
+from torchvision.ops import nms
 
 import torch
 

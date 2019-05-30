@@ -59,6 +59,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
 
 ### Prerequisites
   - A basic pytorch installation. The code follows **1.0**. If you are using old **0.1.12** or **0.2** or **0.3** or **0.4**, you can checkout the corresponding branch.
+  - Torchvision 0.3. This code uses `torchvision.ops` for `nms`, `roi_pool` and `roi_align`
   - Python packages you might not have: `opencv-python`, `easydict` (similar to [py-faster-rcnn](https://github.com/rbgirshick/py-faster-rcnn)). For `easydict` make sure you have the right version. Xinlei uses 1.6.
   - [tensorboard-pytorch](https://github.com/lanpa/tensorboard-pytorch) to visualize the training and validation curve. Please build from source to use the latest tensorflow-tensorboard.
   - ~~Docker users: Since the recent upgrade, the docker image on docker hub (https://hub.docker.com/r/mbuckler/tf-faster-rcnn-deps/) is no longer valid. However, you can still build your own image by using dockerfile located at `docker` folder (cuda 8 version, as it is required by Tensorflow r1.0.) And make sure following Tensorflow installation to install and use nvidia-docker[https://github.com/NVIDIA/nvidia-docker]. Last, after launching the container, you have to build the Cython modules within the running container.~~
@@ -69,14 +70,7 @@ Additional features not mentioned in the [report](https://arxiv.org/pdf/1702.021
   git clone https://github.com/ruotianluo/pytorch-faster-rcnn.git
   ```
 
-2. Compile modules(nms, roi_pooling, and roi_align(from [facebookresearch/maskrcnn-benchmark](https://github.com/facebookresearch/maskrcnn-benchmark.git))):
-  ```
-  cd pytorch-faster-rcnn/lib
-  python setup.py build develop
-  cd ../
-  ```
-
-3. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
+2. Install the [Python COCO API](https://github.com/pdollar/coco). The code requires the API to access COCO dataset.
   ```Shell
   cd data
   git clone https://github.com/pdollar/coco.git

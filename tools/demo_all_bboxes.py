@@ -19,7 +19,7 @@ import _init_paths
 from model.config import cfg
 from model.test import im_detect
 
-from layer_utils.roi_layers import nms
+from torchvision.ops import nms
 
 from utils.timer import Timer
 import matplotlib.pyplot as plt
