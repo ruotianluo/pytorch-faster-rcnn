@@ -289,6 +289,5 @@ class mobilenetv1(Network):
     def load_pretrained_cnn(self, state_dict):
         print('Warning: No available pretrained model yet')
         self.mobilenet.load_state_dict({
-            k: state_dict['features.' + k]
-            for k in list(self.mobilenet.state_dict())
+            k: state_dict['features.' + k] for k in list(self.mobilenet.state_dict()) if 'features.' + k in state_dict
         })
