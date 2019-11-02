@@ -1,3 +1,11 @@
+# Notice(2019.11.2)
+This repo was built back two years ago when there were no pytorch detection implementation that can achieve reasonable performance. At this time, there are many better repos out there, for example:
+
+- [detectron2](https://github.com/facebookresearch/detectron2)
+- [mmdetection](https://github.com/open-mmlab/mmdetection)
+
+Therefore, this repo will not be actively maintained.
+
 # Important notice:
 If you used the master branch before Sep. 26 2017 and its corresponding pretrained model, **PLEASE PAY ATTENTION**:
 The old master branch in now under old_master, you can still run the code and download the pretrained model, but the pretrained model for that old master is not compatible to the current master!
