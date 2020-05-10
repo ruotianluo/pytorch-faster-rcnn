@@ -1,7 +1,7 @@
 # Notice(2019.11.2)
 This repo was built back two years ago when there were no pytorch detection implementation that can achieve reasonable performance. At this time, there are many better repos out there, for example:
 
-- [detectron2](https://github.com/facebookresearch/detectron2)
+- [detectron2](https://github.com/facebookresearch/detectron2)(It's a masterpiece.)
 - [mmdetection](https://github.com/open-mmlab/mmdetection)
 
 Therefore, this repo will not be actively maintained.
