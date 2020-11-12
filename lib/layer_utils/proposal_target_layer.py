@@ -119,7 +119,11 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image,
         max_overlaps >= cfg.TRAIN.BG_THRESH_LO) == 2).nonzero().view(-1)
 
     # Small modification to the original version where we ensure a fixed number of regions are sampled
-    if fg_inds.numel() > 0 and bg_inds.numel() > 0:
+    if fg_inds.numel() == 0 and bg_inds.numel() == 0:
+        to_replace = all_rois.size(0) < rois_per_image
+        bg_inds = torch.from_numpy(npr.choice(np.arange(0, all_rois.size(0)), size=int(rois_per_image), replace=to_replace)).long().cuda()
+        fg_rois_per_image = 0
+    elif fg_inds.numel() > 0 and bg_inds.numel() > 0:
         fg_rois_per_image = min(fg_rois_per_image, fg_inds.numel())
         fg_inds = fg_inds[torch.from_numpy(
             npr.choice(
